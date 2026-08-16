@@ -162,6 +162,37 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   pointer-events: auto;
   width: 100%;
 }
+.hud-acts {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.choice-row { display: flex; flex-wrap: wrap; gap: 0.55rem; margin: 0.4rem 0 0.8rem; }
+.choice {
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.03);
+  color: var(--ink);
+  padding: 0.7rem 0.9rem;
+  min-width: 9rem;
+  text-align: left;
+}
+.choice b { display: block; color: var(--gold-2); font-family: Cinzel, serif; }
+.choice small { color: var(--muted); }
+.choice.on { border-color: var(--gold); background: rgba(120,40,28,0.35); }
+.skirmish-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.7rem; overflow: auto; }
+.skirmish-list article {
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.03);
+  padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.skirmish-list h4 { color: var(--gold-2); }
+.skirmish-list p { color: var(--muted); font-size: 0.88rem; }
+.row-btns { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.row-btns button { min-width: 0; flex: 1; }
 
 #hextip {
   position: absolute; left: 50%; bottom: 1.1rem; transform: translateX(-50%);

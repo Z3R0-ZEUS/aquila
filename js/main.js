@@ -1,4 +1,4 @@
-import { Battle } from './game.js';
+import { Battle, restoreBattle } from './game.js';
 import { MapView } from './render.js';
 import { UI } from './ui.js';
 import { runAiTurn } from './ai.js';
@@ -12,12 +12,15 @@ import {
   applyOverstrength,
   buyUnit,
   dismissUnit,
+  saveBattle,
+  clearBattleSave,
+  DIFFICULTIES,
 } from './campaign.js';
 import { typeOf } from './data/units.js';
 import { canMelee, inMissileRange } from './combat.js';
 import { hexDistance } from './hex.js';
 import { reachable } from './pathfind.js';
-import { CAMPAIGN_INTRO } from './data/scenarios.js';
+import { CAMPAIGN_INTRO, SCENARIOS } from './data/scenarios.js';
 import { sfx, combatSound, toggleMute, isMuted, unlock } from './audio.js';
 
 const app = document.getElementById('app');
@@ -86,12 +89,14 @@ let campaign = loadCampaign();
 let battle = null;
 let aarFollow = 'shop';
 let keys = new Set();
+let setup = { kind: 'campaign', difficulty: 'seasoned', faction: 'rome', scenarioId: null };
 
 const ui = new UI(app, {
   onSpecial(act, unit) {
     if (!battle || battle.phase !== 'player') return;
     if (act === 'engineer') battle.engineerAction(unit);
     if (act === 'burn') battle.burnVillage(unit);
+    if (act === 'testudo') battle.toggleTestudo(unit);
     ui.renderBattle(battle);
     maybeEnd();
   },
@@ -104,6 +109,17 @@ const ui = new UI(app, {
     saveCampaign(campaign);
     ui.renderShop(campaign);
   },
+  onSetup(kind, value) {
+    if (kind === 'difficulty') setup.difficulty = value;
+    if (kind === 'faction') setup.faction = value;
+    drawSetup();
+  },
+  onSkirmish(id, fac) {
+    setup.kind = 'skirmish';
+    setup.scenarioId = id;
+    setup.faction = fac;
+    startSkirmish();
+  },
 });
 
 function syncMute() {
@@ -112,13 +128,39 @@ function syncMute() {
 }
 
 function openTitle() {
-  ui.renderTitle(!!loadCampaign());
+  const c = loadCampaign();
+  ui.renderTitle(!!c, !!(c && c.battleSave));
+}
+
+function drawSetup() {
+  const campaignMode = setup.kind === 'campaign';
+  ui.renderSetup({
+    title: campaignMode ? 'New campaign' : 'Skirmish',
+    lede: campaignMode
+      ? 'Germanicus takes the Rhine army into the timber. Choose your season.'
+      : 'A single field. No winter camp. Pick your people.',
+    difficulty: setup.difficulty,
+    showFaction: !campaignMode,
+    faction: setup.faction,
+  });
 }
 
 function startNew() {
   unlock();
   sfx.ui();
-  campaign = newCampaign();
+  setup.kind = 'campaign';
+  setup.difficulty = campaign?.difficulty || 'seasoned';
+  drawSetup();
+}
+
+function confirmSetup() {
+  unlock();
+  sfx.click();
+  if (setup.kind === 'skirmish') {
+    startSkirmish();
+    return;
+  }
+  campaign = newCampaign(setup.difficulty);
   saveCampaign(campaign);
   ui.renderBriefing(currentScenario(campaign), campaign);
 }
@@ -127,18 +169,22 @@ function continueCamp() {
   unlock();
   sfx.ui();
   campaign = loadCampaign() || newCampaign();
-  if (campaign.mission >= 5) {
+  if (campaign.mission >= SCENARIOS.length) {
     ui.renderEnding(CAMPAIGN_INTRO.text);
     return;
   }
   ui.renderShop(campaign);
 }
 
-function deploy() {
+function resumeBattle() {
   unlock();
-  sfx.click();
-  const sc = currentScenario(campaign);
-  battle = new Battle(sc, { core: campaign.core });
+  sfx.ui();
+  campaign = loadCampaign();
+  if (!campaign?.battleSave) {
+    openTitle();
+    return;
+  }
+  battle = restoreBattle(campaign.battleSave);
   ui.renderBattle(battle);
   requestAnimationFrame(() => {
     view.resize();
@@ -146,12 +192,68 @@ function deploy() {
   });
 }
 
+function startSkirmish() {
+  const sc = SCENARIOS.find((s) => s.id === setup.scenarioId) || SCENARIOS[0];
+  campaign = campaign || newCampaign(setup.difficulty);
+  battle = new Battle(sc, {
+    core: setup.faction === 'rome' ? defaultCoreSafe() : defaultCoreSafe(),
+    playerFaction: setup.faction,
+    difficulty: setup.difficulty,
+    mode: 'skirmish',
+  });
+  const briefCamp = { honors: '—', difficulty: setup.difficulty };
+  ui.renderBriefing(
+    {
+      ...sc,
+      briefing: setup.faction === 'germania'
+        ? `The tribes hold this ground. Drive the eagles off ${sc.subtitle}.`
+        : sc.briefing,
+      objectives: battle.objectives,
+    },
+    briefCamp
+  );
+}
+
+function defaultCoreSafe() {
+  return (campaign && campaign.core) ? campaign.core : newCampaign(setup.difficulty).core;
+}
+
+function deploy() {
+  unlock();
+  sfx.click();
+  if (battle && battle.mode === 'skirmish' && battle.turn === 1 && !battle.result) {
+    ui.renderBattle(battle);
+    requestAnimationFrame(() => {
+      view.resize();
+      view.fitMap(battle);
+    });
+    return;
+  }
+  const sc = currentScenario(campaign);
+  battle = new Battle(sc, {
+    core: campaign.core,
+    playerFaction: 'rome',
+    difficulty: campaign.difficulty || 'seasoned',
+    mode: 'campaign',
+  });
+  ui.renderBattle(battle);
+  requestAnimationFrame(() => {
+    view.resize();
+    view.fitMap(battle);
+  });
+}
+
+function persistBattle() {
+  if (campaign && battle && battle.mode === 'campaign' && !battle.result) saveBattle(campaign, battle);
+}
+
 function maybeEnd() {
   if (battle && battle.result) {
     setTimeout(() => {
-      const follow = applyBattleResult(campaign, battle);
+      if (campaign) clearBattleSave(campaign);
+      const follow = applyBattleResult(campaign || newCampaign(), battle);
       aarFollow = follow.next;
-      saveCampaign(campaign);
+      if (campaign && battle.mode === 'campaign') saveCampaign(campaign);
       if (battle.result.kind === 'defeat') sfx.defeat();
       else sfx.victory();
       ui.renderAar(battle, aarFollow);
@@ -199,7 +301,7 @@ function onMapClick(sx, sy, button) {
   const hex = view.hexAtScreen(sx, sy);
   const unit = battle.unitAt(hex.q, hex.r);
 
-  if (unit && unit.faction === 'rome') {
+  if (unit && unit.faction === battle.playerFaction) {
     battle.select(unit.id);
     sfx.select();
     ui.hidePreview();
@@ -210,7 +312,7 @@ function onMapClick(sx, sy, button) {
   const sel = battle.selected;
   if (!sel || sel.acted) return;
 
-  if (unit && unit.faction === 'germania' && !unit.hidden) {
+  if (unit && unit.faction === battle.enemyFaction && !unit.hidden) {
     const needMove = hexDistance(sel, unit) > 1 && !(typeOf(sel).range > 0 && sel.ammo > 0 && hexDistance(sel, unit) <= typeOf(sel).range);
     if (needMove) {
       const { hexes } = reachable(battle, sel);
@@ -227,6 +329,7 @@ function onMapClick(sx, sy, button) {
         if (movedIn) {
           sfx.move();
           view.playMove(movedIn.from, movedIn.to);
+          persistBattle();
         }
       }
     }
@@ -252,6 +355,36 @@ function onMapClick(sx, sy, button) {
   if (moved) {
     sfx.move();
     view.playMove(moved.from, moved.to);
+    persistBattle();
+    ui.renderBattle(battle);
+  }
+}
+
+function cycleUnit() {
+  if (!battle || battle.phase !== 'player') return;
+  const u = battle.nextIdle();
+  if (u) {
+    sfx.select();
+    ui.renderBattle(battle);
+  }
+}
+
+function holdUnit() {
+  if (!battle || battle.phase !== 'player' || !battle.selected) return;
+  if (battle.waitUnit(battle.selected)) {
+    sfx.ui();
+    persistBattle();
+    ui.renderBattle(battle);
+  }
+}
+
+function undoUnit() {
+  if (!battle) return;
+  const undone = battle.undoMove();
+  if (undone) {
+    sfx.ui();
+    view.playMove(undone.from, undone.to);
+    persistBattle();
     ui.renderBattle(battle);
   }
 }
@@ -297,13 +430,23 @@ canvas.addEventListener('wheel', (e) => {
 
 window.addEventListener('keydown', (e) => {
   keys.add(e.key.toLowerCase());
-  if (e.key === 'Enter' && document.getElementById('screen-battle').classList.contains('show')) endTurn();
+  if (!document.getElementById('screen-battle').classList.contains('show')) return;
+  if (e.key === 'Enter') endTurn();
   if (e.key === 'Escape') {
     if (battle) battle.selectedId = null;
     ui.hidePreview();
     if (battle) ui.renderBattle(battle);
   }
   if ((e.key === 'f' || e.key === 'F') && battle) view.fitMap(battle);
+  if (e.key === 'n' || e.key === 'N' || e.key === 'Tab') {
+    e.preventDefault();
+    cycleUnit();
+  }
+  if (e.key === ' ') {
+    e.preventDefault();
+    holdUnit();
+  }
+  if (e.key === 'u' || e.key === 'U') undoUnit();
 });
 window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 
@@ -314,12 +457,42 @@ document.getElementById('btn-mute').onclick = () => {
 };
 document.getElementById('btn-new').onclick = startNew;
 document.getElementById('btn-continue').onclick = continueCamp;
+document.getElementById('btn-resume').onclick = resumeBattle;
+document.getElementById('btn-skirmish').onclick = () => {
+  unlock();
+  sfx.ui();
+  ui.renderSkirmish();
+};
+document.getElementById('btn-setup-go').onclick = confirmSetup;
+document.getElementById('btn-setup-back').onclick = openTitle;
+document.getElementById('btn-skirmish-back').onclick = openTitle;
 document.getElementById('btn-deploy').onclick = deploy;
-document.getElementById('btn-brief-back').onclick = () => ui.renderShop(campaign);
+document.getElementById('btn-brief-back').onclick = () => {
+  if (battle && battle.mode === 'skirmish') {
+    battle = null;
+    openTitle();
+    return;
+  }
+  ui.renderShop(campaign);
+};
+document.getElementById('btn-next-unit').onclick = cycleUnit;
+document.getElementById('btn-wait').onclick = holdUnit;
+document.getElementById('btn-undo').onclick = undoUnit;
+document.getElementById('btn-save').onclick = () => {
+  persistBattle();
+  sfx.click();
+  if (battle) battle.pushLog('The field is marked. You may leave and return.');
+  ui.renderBattle(battle);
+};
 document.getElementById('btn-end').onclick = endTurn;
 document.getElementById('aar-next').onclick = () => {
-  if (aarFollow === 'retry') ui.renderBriefing(currentScenario(campaign), campaign);
-  else if (aarFollow === 'ending') ui.renderEnding(ui._endingText || '');
+  if (aarFollow === 'title') {
+    battle = null;
+    openTitle();
+  } else if (aarFollow === 'retry') {
+    if (battle && battle.mode === 'skirmish') startSkirmish();
+    else ui.renderBriefing(currentScenario(campaign), campaign);
+  } else if (aarFollow === 'ending') ui.renderEnding(ui._endingText || '');
   else ui.renderShop(campaign);
 };
 document.getElementById('btn-next-mission').onclick = () => ui.renderBriefing(currentScenario(campaign), campaign);
@@ -344,7 +517,7 @@ loadAssets().then(() => {
   if (scene === 'briefing' || scene === 'battle' || scene === 'shop') {
     campaign = newCampaign();
     const m = Number(params.get('mission') || 0);
-    if (Number.isFinite(m) && m >= 0 && m < 5) campaign.mission = m;
+    if (Number.isFinite(m) && m >= 0 && m < SCENARIOS.length) campaign.mission = m;
     if (scene === 'shop') ui.renderShop(campaign);
     else if (scene === 'battle') deploy();
     else ui.renderBriefing(currentScenario(campaign), campaign);

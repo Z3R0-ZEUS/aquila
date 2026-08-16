@@ -1,7 +1,7 @@
 import { typeOf, effectiveStrength, UNIT_TYPES } from './data/units.js';
 import { TERRAIN } from './data/terrain.js';
 import { hexDistance } from './hex.js';
-import { shopCatalog, slotsUsed, refillCost, MAX_SLOTS } from './campaign.js';
+import { shopCatalog, slotsUsed, refillCost, MAX_SLOTS, DIFFICULTIES } from './campaign.js';
 import { SCENARIOS } from './data/scenarios.js';
 
 export class UI {
@@ -15,10 +15,55 @@ export class UI {
     for (const el of this.root.querySelectorAll('.screen')) el.classList.toggle('show', el.id === id);
   }
 
-  renderTitle(hasSave) {
+  renderTitle(hasSave, hasBattle) {
     this.show('screen-title');
-    const cont = this.root.querySelector('#btn-continue');
-    cont.hidden = !hasSave;
+    this.root.querySelector('#btn-continue').hidden = !hasSave;
+    const resume = this.root.querySelector('#btn-resume');
+    if (resume) resume.hidden = !hasBattle;
+  }
+
+  renderSetup(opts) {
+    this.show('screen-setup');
+    this.root.querySelector('#setup-title').textContent = opts.title;
+    this.root.querySelector('#setup-lede').textContent = opts.lede;
+    const diffs = this.root.querySelector('#setup-diffs');
+    diffs.innerHTML = Object.entries(DIFFICULTIES)
+      .map(
+        ([id, d]) =>
+          `<button class="choice ${opts.difficulty === id ? 'on' : ''}" data-diff="${id}"><b>${d.label}</b><small>${d.blurb}</small></button>`
+      )
+      .join('');
+    diffs.querySelectorAll('[data-diff]').forEach((b) => {
+      b.onclick = () => this.h.onSetup('difficulty', b.dataset.diff);
+    });
+    const fac = this.root.querySelector('#setup-factions');
+    fac.hidden = !opts.showFaction;
+    if (opts.showFaction) {
+      fac.innerHTML = `
+        <button class="choice ${opts.faction === 'rome' ? 'on' : ''}" data-fac="rome"><b>Rome</b><small>Legions and auxilia</small></button>
+        <button class="choice ${opts.faction === 'germania' ? 'on' : ''}" data-fac="germania"><b>The tribes</b><small>Warbands under Arminius</small></button>`;
+      fac.querySelectorAll('[data-fac]').forEach((b) => {
+        b.onclick = () => this.h.onSetup('faction', b.dataset.fac);
+      });
+    }
+  }
+
+  renderSkirmish() {
+    this.show('screen-skirmish');
+    const list = this.root.querySelector('#skirmish-list');
+    list.innerHTML = SCENARIOS.map(
+      (s) => `<article>
+        <h4>${s.title}</h4>
+        <p>${s.year} · ${s.subtitle}</p>
+        <div class="row-btns">
+          <button data-sk="${s.id}" data-fac="rome">As Rome</button>
+          <button data-sk="${s.id}" data-fac="germania">As the tribes</button>
+        </div>
+      </article>`
+    ).join('');
+    list.querySelectorAll('[data-sk]').forEach((b) => {
+      b.onclick = () => this.h.onSkirmish(b.dataset.sk, b.dataset.fac);
+    });
   }
 
   renderBriefing(scenario, campaign) {
@@ -29,7 +74,9 @@ export class UI {
     this.root.querySelector('#briefing-title').textContent = scenario.title;
     this.root.querySelector('#briefing-sub').textContent = scenario.subtitle;
     this.root.querySelector('#briefing-text').textContent = scenario.briefing;
-    this.root.querySelector('#briefing-honors').textContent = campaign.honors;
+    this.root.querySelector('#briefing-honors').textContent = campaign.honors ?? '—';
+    const subExtra = campaign.difficulty ? ` · ${campaign.difficulty}` : '';
+    this.root.querySelector('#briefing-sub').textContent = scenario.subtitle + subExtra;
     const objs = this.root.querySelector('#briefing-objs');
     objs.innerHTML = scenario.objectives.map((o) => `<li>${o.required ? 'Required' : 'Optional'} — ${o.text}</li>`).join('');
     const hints = this.root.querySelector('#briefing-hints');
@@ -50,13 +97,17 @@ export class UI {
     log.innerHTML = battle.log.slice(0, 8).map((l) => `<div><span>T${l.turn}</span>${l.msg}</div>`).join('');
     this.renderPortrait(battle.selected, battle);
     this.root.querySelector('#btn-end').disabled = battle.phase !== 'player' || !!battle.result;
+    const save = this.root.querySelector('#btn-save');
+    if (save) save.disabled = battle.mode !== 'campaign' || !!battle.result;
+    const undo = this.root.querySelector('#btn-undo');
+    if (undo) undo.disabled = !battle.lastMove || battle.phase !== 'player';
   }
 
   renderPortrait(unit, battle) {
     const card = this.root.querySelector('#portrait-card');
     if (!unit) {
       card.classList.add('empty');
-      card.innerHTML = `<div class="empty-hint">Select a cohort.<br>Blue hexes move · red hexes attack.<br>WASD pan · scroll zoom · F fit · Enter end turn.</div>`;
+      card.innerHTML = `<div class="empty-hint">Select a cohort.<br>Blue hexes move · red hexes attack.<br>N next · Space hold · U undo · Enter end.</div>`;
       return;
     }
     card.classList.remove('empty');
@@ -66,6 +117,9 @@ export class UI {
     const actions = [];
     if (t.traits.includes('engineer') && !unit.acted) {
       actions.push(`<button data-act="engineer">Repair / Fortify</button>`);
+    }
+    if (t.traits.includes('formed') && !unit.acted && !unit.moved) {
+      actions.push(`<button data-act="testudo">${unit.testudo ? 'Break testudo' : 'Form testudo'}</button>`);
     }
     if (terr.burnable && !battle.cell(unit.q, unit.r).burned && unit.faction === 'rome' && !unit.acted) {
       actions.push(`<button data-act="burn">Put village to the torch</button>`);

@@ -1,6 +1,6 @@
 import { hexDistance, offsetToAxial, neighbors } from './hex.js';
 import { killChance, previewCombat, resolveCombat, applyHits } from './combat.js';
-import { Battle } from './game.js';
+import { Battle, restoreBattle } from './game.js';
 import { SCENARIOS } from './data/scenarios.js';
 import { defaultCore } from './campaign.js';
 import { makeUnit } from './data/units.js';
@@ -71,6 +71,19 @@ export function runTests() {
     assert(`${s.id} has cells`, bat.cells.size > 20);
     assert(`${s.id} units placed`, bat.units.length >= 4);
   }
+  assert('six campaign fields', SCENARIOS.length === 6);
+  assert('angrivarian present', SCENARIOS.some((s) => s.id === 'angrivarian'));
+
+  const ger = new Battle(SCENARIOS[0], { core: defaultCore(), playerFaction: 'germania', seed: 2 });
+  assert('german player faction', ger.playerFaction === 'germania' && ger.enemyFaction === 'rome');
+  const gUnit = ger.units.find((u) => u.faction === 'germania' && u.strength > 0);
+  ger.select(gUnit.id);
+  assert('german unit selectable', ger.selected && ger.selected.faction === 'germania');
+
+  const snap = new Battle(SCENARIOS[0], { core: defaultCore(), seed: 9 });
+  const again = restoreBattle(snap.toJSON());
+  assert('restore keeps units', again.units.length === snap.units.length);
+  assert('restore keeps turn', again.turn === snap.turn);
 
   const play = new Battle(SCENARIOS[0], { core: defaultCore(), seed: 7 });
   const rome = play.units.find((u) => u.faction === 'rome' && u.typeId === 'legion' && u.strength > 0);

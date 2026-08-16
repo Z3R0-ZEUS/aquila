@@ -29,13 +29,47 @@ export class Battle {
     this.seed = opts.seed || (Date.now() % 1e9);
     this.rng = mulberry32(this.seed);
     this.coreSnapshot = opts.core || [];
-    this.objectives = (scenario.objectives || []).map((o) => ({ ...o, done: false }));
-    this.playerFaction = 'rome';
+    this.playerFaction = opts.playerFaction || 'rome';
+    this.enemyFaction = this.playerFaction === 'rome' ? 'germania' : 'rome';
+    this.difficulty = opts.difficulty || 'seasoned';
+    this.mode = opts.mode || 'campaign';
+    this.lastMove = null;
+    this.objectives = this.buildObjectives(scenario);
     this._idSeq = 1;
     this.buildMap(scenario);
-    this.placeUnits(scenario, opts);
+    if (opts.restore) this.restore(opts.restore);
+    else {
+      this.placeUnits(scenario, opts);
+      this.applyDifficulty();
+    }
     markSupply(this);
-    this.pushLog(`Turn 1 — ${scenario.title}. Weather: ${this.weather}.`);
+    if (!opts.restore) this.pushLog(`Turn 1 — ${scenario.title}. Weather: ${this.weather}.`);
+  }
+
+  buildObjectives(scenario) {
+    if (this.playerFaction === 'rome') {
+      return (scenario.objectives || []).map((o) => ({ ...o, done: false }));
+    }
+    const hero = (scenario.units || []).find((u) => u.typeId === 'arminius') ? 'arminius' : 'nobles';
+    const objs = [
+      { id: 'rout', type: 'routArmy', required: true, text: 'Break the Roman host (≤35% remaining)', done: false },
+      { id: 'hero', type: 'survive', unit: hero, required: true, text: 'Your chieftain must live', done: false },
+    ];
+    if (scenario.failIf) {
+      objs.push({
+        id: 'seize',
+        type: 'occupy',
+        col: scenario.failIf.col,
+        row: scenario.failIf.row,
+        required: false,
+        text: 'Seize their camp',
+        done: false,
+      });
+    }
+    if ((scenario.objectives || []).some((o) => o.type === 'eagle')) {
+      objs.push({ id: 'deny', type: 'denyEagle', required: false, text: 'Keep the eagle from Rome', done: false });
+    }
+    return objs;
   }
 
   cell(q, r) {
@@ -125,10 +159,23 @@ export class Battle {
         ...cu,
         q: spot.q,
         r: spot.r,
-        core: true,
+        core: this.playerFaction === 'rome',
         hidden: false,
       });
       this.units.push(u);
+    }
+  }
+
+  applyDifficulty() {
+    const enemy = this.enemyFaction;
+    for (const u of this.units) {
+      if (u.faction !== enemy || u.strength <= 0) continue;
+      if (this.difficulty === 'recruit') {
+        u.strength = Math.max(4, u.strength - 2);
+      } else if (this.difficulty === 'veteran') {
+        u.strength = Math.min(u.maxStrength + 1, u.strength + 1);
+        u.maxStrength = Math.max(u.maxStrength, u.strength);
+      }
     }
   }
 
@@ -173,21 +220,30 @@ export class Battle {
   }
 
   phaseToFaction() {
-    return this.phase === 'player' ? 'rome' : 'germania';
+    return this.phase === 'player' ? this.playerFaction : this.enemyFaction;
   }
 
   tryMove(unit, q, r) {
-    if (this.phase !== 'player' || unit.faction !== 'rome' || unit.acted) return null;
+    if (this.phase !== 'player' || unit.faction !== this.playerFaction || unit.acted) return null;
     const { hexes, cameFrom } = reachable(this, unit);
     const dest = hexes.find((h) => h.q === q && h.r === r);
     if (!dest) return null;
     const path = reconstructPath(cameFrom, unit, { q, r });
     const from = { q: unit.q, r: unit.r };
+    this.lastMove = {
+      id: unit.id,
+      q: unit.q,
+      r: unit.r,
+      mp: unit.mpRemaining,
+      entrench: unit.entrench,
+      testudo: !!unit.testudo,
+    };
     unit.q = q;
     unit.r = r;
     unit.mpRemaining -= dest.cost;
     unit.moved = true;
     unit.entrench = 0;
+    unit.testudo = false;
     if (typeOf(unit).traits.includes('recon')) this.revealNear(unit, 2);
     else this.revealNear(unit, 1);
     this.checkSpecialHex(unit);
@@ -217,7 +273,7 @@ export class Battle {
       this.honorsEarned += 15;
       this.pushLog('The bones of Varus\'s men are given earth and prayer.');
     }
-    if (c.extract && unit.faction === 'rome') {
+    if (c.extract && unit.faction === this.playerFaction) {
       this.extracted.push(unit.id);
       unit.strength = 0;
       unit.extracted = true;
@@ -243,7 +299,8 @@ export class Battle {
         this.honorsEarned += 40;
       }
     }
-    if (result.attackerDead && isHero(attacker) && attacker.faction === 'rome') {
+    this.lastMove = null;
+    if (result.attackerDead && isHero(attacker) && attacker.faction === this.playerFaction) {
       this.result = { kind: 'defeat', title: 'The commander has fallen', text: `${attacker.name} is slain. The eagles dip.` };
     }
     if (result.retreat && defender.strength > 0) {
@@ -314,9 +371,56 @@ export class Battle {
     return false;
   }
 
+  waitUnit(unit) {
+    if (!unit || unit.acted || unit.faction !== this.playerFaction) return false;
+    unit.acted = true;
+    unit.mpRemaining = 0;
+    this.lastMove = null;
+    this.pushLog(`${unit.name} holds.`);
+    return true;
+  }
+
+  undoMove() {
+    if (!this.lastMove || this.phase !== 'player') return null;
+    const u = this.unitById(this.lastMove.id);
+    if (!u || u.acted || u.strength <= 0) return null;
+    const to = { q: u.q, r: u.r };
+    u.q = this.lastMove.q;
+    u.r = this.lastMove.r;
+    u.mpRemaining = this.lastMove.mp;
+    u.entrench = this.lastMove.entrench;
+    u.testudo = this.lastMove.testudo;
+    u.moved = false;
+    const from = { q: to.q, r: to.r };
+    this.lastMove = null;
+    markSupply(this);
+    return { from: to, to: { q: u.q, r: u.r }, unit: u };
+  }
+
+  toggleTestudo(unit) {
+    const t = typeOf(unit);
+    if (!t.traits.includes('formed') || unit.acted || unit.moved) return false;
+    unit.testudo = !unit.testudo;
+    if (unit.testudo) {
+      unit.acted = true;
+      unit.mpRemaining = 0;
+      this.pushLog(`${unit.name} locks shields. Testudo.`);
+    }
+    return true;
+  }
+
+  nextIdle() {
+    const idle = this.units.filter((u) => u.faction === this.playerFaction && u.strength > 0 && !u.acted && !u.extracted);
+    if (!idle.length) return null;
+    const i = idle.findIndex((u) => u.id === this.selectedId);
+    const next = idle[(i + 1) % idle.length];
+    this.select(next.id);
+    return next;
+  }
+
   burnVillage(unit) {
     const c = this.cell(unit.q, unit.r);
-    if (!c || c.terrain !== 'village' || c.burned || unit.faction !== 'rome' || unit.acted) return false;
+    if (!c || c.terrain !== 'village' || c.burned || unit.faction !== this.playerFaction || unit.acted) return false;
     c.burned = true;
     this.flags.burned = (this.flags.burned || 0) + 1;
     unit.acted = true;
@@ -331,9 +435,10 @@ export class Battle {
   endPlayerTurn() {
     if (this.phase !== 'player' || this.result) return;
     this.selectedId = null;
-    this.recoverSide('rome');
+    this.lastMove = null;
+    this.recoverSide(this.playerFaction);
     this.phase = 'ai';
-    this.pushLog('The Germans move.');
+    this.pushLog(this.enemyFaction === 'germania' ? 'The Germans move.' : 'The eagles advance.');
   }
 
   recoverSide(faction) {
@@ -379,7 +484,7 @@ export class Battle {
 
   revealVision() {
     for (const u of this.units) {
-      if (u.faction !== 'rome' || u.strength <= 0) continue;
+      if (u.faction !== this.playerFaction || u.strength <= 0) continue;
       const vis = 2 + (TERRAIN[this.cell(u.q, u.r)?.terrain]?.vision || 0);
       const range = this.weather === 'fog' ? Math.min(2, vis) : vis;
       this.revealNear(u, typeOf(u).traits.includes('recon') ? range + 1 : range);
@@ -422,7 +527,7 @@ export class Battle {
       const { offsetToAxial } = axial();
       const { q, r } = offsetToAxial(o.col, o.row);
       const u = this.unitAt(q, r);
-      return !u || u.faction === 'rome';
+      return !u || u.faction === this.playerFaction;
     }
     if (o.type === 'holdUntil') return this.turn >= this.maxTurns && this.evalObjective({ ...o, type: 'hold' });
     if (o.type === 'survive') {
@@ -433,7 +538,7 @@ export class Battle {
       const { offsetToAxial } = axial();
       const { q, r } = offsetToAxial(o.col, o.row);
       const u = this.unitAt(q, r);
-      return u && u.faction === 'rome';
+      return u && u.faction === this.playerFaction;
     }
     if (o.type === 'extract') {
       const n = this.extracted.length;
@@ -442,34 +547,36 @@ export class Battle {
     if (o.type === 'eagle') return !!this.flags.eagle;
     if (o.type === 'bury') return (this.flags.buried || 0) >= (o.count || 2);
     if (o.type === 'routArmy') {
-      const live = this.units.filter((u) => u.faction === 'germania' && u.strength > 0).length;
-      const start = this.flags.germanStart || this.units.filter((u) => u.faction === 'germania').length;
-      this.flags.germanStart = start;
+      const live = this.units.filter((u) => u.faction === this.enemyFaction && u.strength > 0).length;
+      const key = this.enemyFaction === 'germania' ? 'germanStart' : 'romeStart';
+      const start = this.flags[key] || this.units.filter((u) => u.faction === this.enemyFaction).length;
+      this.flags[key] = start;
       return live <= Math.floor(start * 0.35);
     }
     if (o.type === 'heroDown') return !!this.flags.arminiusDown;
+    if (o.type === 'denyEagle') return !this.flags.eagle && this.turn >= this.maxTurns;
     return false;
   }
 
   checkEnd() {
     if (this.result) return;
-    const hero = this.units.find((u) => u.faction === 'rome' && isHero(u) && !u.extracted);
+    const hero = this.units.find((u) => u.faction === this.playerFaction && isHero(u) && !u.extracted);
     if (hero && hero.strength <= 0 && !hero.extracted) {
-      this.result = { kind: 'defeat', title: 'The commander has fallen', text: 'Without a voice to hold them, the cohorts break.' };
+      this.result = { kind: 'defeat', title: 'The commander has fallen', text: 'Without a voice to hold them, the line breaks.' };
       return;
     }
-    if (this.scenario.failIf && this.evalObjective(this.scenario.failIf) === false && this.scenario.failIf.type === 'hold') {
+    if (this.playerFaction === 'rome' && this.scenario.failIf && this.evalObjective(this.scenario.failIf) === false && this.scenario.failIf.type === 'hold') {
       const { offsetToAxial } = axial();
       const { q, r } = offsetToAxial(this.scenario.failIf.col, this.scenario.failIf.row);
       const u = this.unitAt(q, r);
-      if (u && u.faction === 'germania') {
+      if (u && u.faction === this.enemyFaction) {
         this.result = { kind: 'defeat', title: 'The principia is taken', text: 'Barbarians stand where the eagles slept.' };
         return;
       }
     }
     const required = this.objectives.filter((o) => o.required);
     const optional = this.objectives.filter((o) => !o.required);
-    const enemiesLive = this.units.some((u) => u.faction === 'germania' && u.strength > 0);
+    const enemiesLive = this.units.some((u) => u.faction === this.enemyFaction && u.strength > 0);
     const reqNonTimer = required.filter((o) => o.type !== 'holdUntil');
     const reqOk = required.length && required.every((o) => o.done);
     const anyAlt = this.scenario.winAny
@@ -520,6 +627,89 @@ export class Battle {
   preview(attacker, defender, missile) {
     return previewCombat(this, attacker, defender, { missile });
   }
+
+  idleCount() {
+    return this.units.filter((u) => u.faction === this.playerFaction && u.strength > 0 && !u.acted && !u.extracted).length;
+  }
+
+  toJSON() {
+    return {
+      scenarioId: this.scenario.id,
+      playerFaction: this.playerFaction,
+      difficulty: this.difficulty,
+      mode: this.mode,
+      turn: this.turn,
+      phase: this.phase,
+      weather: this.weather,
+      flags: this.flags,
+      honorsEarned: this.honorsEarned,
+      casualties: this.casualties,
+      extracted: this.extracted,
+      selectedId: this.selectedId,
+      seed: this.seed,
+      log: this.log.slice(0, 24),
+      units: this.units.map((u) => ({
+        id: u.id,
+        typeId: u.typeId,
+        name: u.name,
+        q: u.q,
+        r: u.r,
+        strength: u.strength,
+        maxStrength: u.maxStrength,
+        disorder: u.disorder,
+        entrench: u.entrench,
+        experience: u.experience,
+        ammo: u.ammo,
+        moved: u.moved,
+        acted: u.acted,
+        mpRemaining: u.mpRemaining,
+        hidden: u.hidden,
+        core: u.core,
+        extracted: !!u.extracted,
+        testudo: !!u.testudo,
+        inSupply: !!u.inSupply,
+      })),
+      cells: [...this.cells.values()].map((c) => ({
+        q: c.q,
+        r: c.r,
+        terrain: c.terrain,
+        burned: !!c.burned,
+        buried: !!c.buried,
+        eagle: !!c.eagle,
+        extract: !!c.extract,
+        principia: !!c.principia,
+        supplySource: !!c.supplySource,
+      })),
+    };
+  }
+
+  restore(data) {
+    this.turn = data.turn;
+    this.phase = data.phase;
+    this.weather = data.weather;
+    this.flags = data.flags || {};
+    this.honorsEarned = data.honorsEarned || 0;
+    this.casualties = data.casualties || { rome: 0, germania: 0 };
+    this.extracted = data.extracted || [];
+    this.selectedId = data.selectedId || null;
+    this.log = data.log || [];
+    this.units = (data.units || []).map((u) => ({
+      ...makeUnit(u.typeId, u),
+      ...u,
+    }));
+    for (const c of data.cells || []) {
+      const cell = this.cell(c.q, c.r);
+      if (!cell) continue;
+      cell.terrain = c.terrain;
+      cell.burned = c.burned;
+      cell.buried = c.buried;
+      cell.eagle = c.eagle;
+      cell.extract = c.extract;
+      cell.principia = c.principia;
+      cell.supplySource = c.supplySource;
+    }
+    this.updateObjectives();
+  }
 }
 
 function weatherName(w) {
@@ -541,4 +731,16 @@ export function loadScenario(id) {
   const s = SCENARIOS.find((x) => x.id === id);
   if (!s) throw new Error(`No scenario ${id}`);
   return s;
+}
+
+export function restoreBattle(data) {
+  const s = loadScenario(data.scenarioId);
+  return new Battle(s, {
+    core: [],
+    playerFaction: data.playerFaction || 'rome',
+    difficulty: data.difficulty || 'seasoned',
+    mode: data.mode || 'campaign',
+    seed: data.seed,
+    restore: data,
+  });
 }

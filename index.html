@@ -16,6 +16,39 @@
         <div class="actions">
           <button class="gold" id="btn-new">New campaign</button>
           <button class="ghost" id="btn-continue" hidden>Continue</button>
+          <button class="ghost" id="btn-resume" hidden>Resume battle</button>
+          <button class="ghost" id="btn-skirmish">Skirmish</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-setup" class="screen">
+      <div class="frame">
+        <div class="frame-art" style="background-image:url(assets/briefings/title.png)"></div>
+        <div class="frame-copy">
+          <div class="year">Orders of battle</div>
+          <h2 id="setup-title">New campaign</h2>
+          <p class="lede" id="setup-lede">Choose how hard the timber will be.</p>
+          <div id="setup-diffs" class="choice-row"></div>
+          <div id="setup-factions" class="choice-row" hidden></div>
+          <div class="actions" style="margin-top:1rem">
+            <button class="gold" id="btn-setup-go">Begin</button>
+            <button class="ghost" id="btn-setup-back">Title</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-skirmish" class="screen">
+      <div class="frame">
+        <div class="frame-copy shop-copy" style="grid-column:1/-1">
+          <div class="year">Skirmish</div>
+          <h2>Pick a field</h2>
+          <p class="lede">Fight any battle as Rome or as the tribes. Core army is not used — only the field and the eagles on it.</p>
+          <div id="skirmish-list" class="skirmish-list"></div>
+          <div class="actions" style="margin-top:1rem">
+            <button class="ghost" id="btn-skirmish-back">Title</button>
+          </div>
         </div>
       </div>
     </section>
@@ -54,7 +87,13 @@
           <ul id="hud-objs"></ul>
         </div>
         <div class="panel" id="portrait-card"></div>
-        <button class="gold" id="btn-end">End turn</button>
+        <div class="hud-acts">
+          <button class="gold" id="btn-end">End turn</button>
+          <button class="ghost compact" id="btn-next-unit">Next (N)</button>
+          <button class="ghost compact" id="btn-wait">Hold (Space)</button>
+          <button class="ghost compact" id="btn-undo">Undo (U)</button>
+          <button class="ghost compact" id="btn-save">Save</button>
+        </div>
       </div>
       <div id="hud-right">
         <div class="panel">

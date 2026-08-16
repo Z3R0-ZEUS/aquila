@@ -1,17 +1,18 @@
 import { hexDistance, neighbors } from './hex.js';
 import { typeOf, isHero, effectiveStrength } from './data/units.js';
 import { reachable } from './pathfind.js';
-import { previewCombat, inMissileRange, canMelee } from './combat.js';
+import { previewCombat, inMissileRange } from './combat.js';
 import { TERRAIN } from './data/terrain.js';
 import { markSupply } from './supply.js';
 
 export function runAiTurn(battle) {
   const acts = [];
-  const germans = battle.units
-    .filter((u) => u.faction === 'germania' && u.strength > 0)
+  const side = battle.enemyFaction || 'germania';
+  const foes = battle.units
+    .filter((u) => u.faction === side && u.strength > 0)
     .sort((a, b) => typeOf(b).initiative - typeOf(a).initiative);
 
-  for (const u of germans) {
+  for (const u of foes) {
     if (u.strength <= 0 || battle.result) break;
     u.mpRemaining = typeOf(u).move;
     u.moved = false;
@@ -19,18 +20,18 @@ export function runAiTurn(battle) {
     const act = actUnit(battle, u);
     if (act) acts.push(act);
   }
-  battle.recoverSide('germania');
+  battle.recoverSide(side);
   markSupply(battle);
   return acts;
 }
 
 function actUnit(battle, unit) {
   const t = typeOf(unit);
-  const enemies = battle.units.filter((e) => e.faction === 'rome' && e.strength > 0 && !e.extracted);
+  const enemies = battle.units.filter((e) => e.faction === battle.playerFaction && e.strength > 0 && !e.extracted);
   if (!enemies.length) return null;
+  const bold = battle.difficulty === 'veteran' ? 0.75 : battle.difficulty === 'recruit' ? 1.8 : 1.15;
 
-  // Shoot first if a good shot exists from here
-  const shot = bestShot(battle, unit, enemies, unit);
+  const shot = bestShot(battle, unit, enemies);
   if (shot && shot.score >= 1.2) {
     const res = battle.tryAttack(unit, shot.target, { ai: true, missile: true });
     return { type: 'attack', unit, target: shot.target, result: res, missile: true };
@@ -38,21 +39,20 @@ function actUnit(battle, unit) {
 
   const { hexes } = reachable(battle, unit);
   const spots = [{ q: unit.q, r: unit.r, cost: 0 }, ...hexes];
-
   let best = { score: -999, spot: spots[0], target: null, missile: false, melee: false };
 
   for (const spot of spots) {
     let stand = standScore(battle, unit, spot);
-    // prefer forest for germans
     const cell = battle.cell(spot.q, spot.r);
     const terr = TERRAIN[cell?.terrain || 'clear'];
-    if (terr.id === 'denseForest' || terr.id === 'lightForest') stand += 1.2;
+    if (unit.faction === 'germania' && (terr.id === 'denseForest' || terr.id === 'lightForest')) stand += 1.2;
+    if (unit.faction === 'rome' && terr.id === 'clear') stand += 0.6;
     if (terr.id === 'marsh' && t.traits.includes('cavalry')) stand -= 5;
-    if (cell?.principia || cell?.gate) stand += 6;
+    if (cell?.principia || cell?.gate) stand += unit.faction === 'germania' ? 6 : 3;
     if (cell?.extract) stand += 2;
     if (cell?.eagle) stand += 2;
     if (cell?.terrain === 'causeway') stand += 2.5;
-    if (isHero(unit) && terr.id === 'clear') stand -= 1;
+    if (isHero(unit) && terr.id === 'clear' && unit.faction === 'germania') stand -= 1;
 
     for (const e of enemies) {
       const d = hexDistance(spot, e);
@@ -69,20 +69,18 @@ function actUnit(battle, unit) {
       }
     }
 
-    // approach score if no attack from this hex
     const nearest = enemies.reduce((a, e) => (hexDistance(spot, e) < hexDistance(spot, a) ? e : a), enemies[0]);
-    const approach = stand + 3 - hexDistance(spot, nearest) * 0.55 + objectivePull(battle, spot);
+    const approach = stand + 3 - hexDistance(spot, nearest) * 0.55 + objectivePull(battle, spot, unit);
     if (!best.target && approach > best.score) best = { score: approach, spot, target: null, missile: false, melee: false };
     else if (approach > best.score + 3 && isHero(unit) && effectiveStrength(unit) <= 3) {
       best = { score: approach, spot, target: null, missile: false, melee: false };
     }
   }
 
-  // Heroes with low strength: refuse bad melees
-  if (isHero(unit) && best.melee && best.target) {
+  if (best.melee && best.target) {
     const fake = { ...unit, q: best.spot.q, r: best.spot.r };
     const prev = previewCombat(battle, fake, best.target, { missile: false });
-    if (prev.toAttacker.kills >= unit.strength - 1) {
+    if (prev.toAttacker.kills * bold >= effectiveStrength(unit) - (isHero(unit) ? 2 : 0.5)) {
       best.melee = false;
       best.target = null;
     }
@@ -93,6 +91,7 @@ function actUnit(battle, unit) {
     unit.r = best.spot.r;
     unit.moved = true;
     unit.entrench = 0;
+    unit.testudo = false;
     unit.mpRemaining = Math.max(0, unit.mpRemaining - (best.spot.cost || 0));
     if (unit.hidden && TERRAIN[battle.cell(unit.q, unit.r)?.terrain]?.id === 'clear') unit.hidden = false;
   }
@@ -106,17 +105,14 @@ function actUnit(battle, unit) {
   return { type: 'move', unit, to: { q: unit.q, r: unit.r } };
 }
 
-function bestShot(battle, unit, enemies, from) {
+function bestShot(battle, unit, enemies) {
   const t = typeOf(unit);
   if (t.range <= 0 || unit.ammo <= 0) return null;
   let best = null;
   for (const e of enemies) {
-    const d = hexDistance(from, e);
+    const d = hexDistance(unit, e);
     if (d < 1 || d > t.range) continue;
-    if (d > 1 && !inMissileRange({ ...battle, }, { ...unit, q: from.q, r: from.r }, e)) {
-      // inMissileRange uses unit position; we already check distance
-    }
-    const prev = previewCombat(battle, { ...unit, q: from.q, r: from.r }, e, { missile: true });
+    const prev = previewCombat(battle, unit, e, { missile: true });
     const score = attackScore(prev, unit, e);
     if (!best || score > best.score) best = { target: e, score };
   }
@@ -137,17 +133,17 @@ function standScore(battle, unit, spot) {
   let s = 0;
   const adj = neighbors(spot).filter((n) => {
     const u = battle.unitAt(n.q, n.r);
-    return u && u.faction === 'rome';
+    return u && u.faction === battle.playerFaction;
   }).length;
   if (adj >= 2 && !isHero(unit)) s += 1.4;
   if (adj >= 2 && isHero(unit)) s -= 1.5;
   return s;
 }
 
-function objectivePull(battle, spot) {
+function objectivePull(battle, spot, unit) {
   let p = 0;
   for (const c of battle.cells.values()) {
-    if (c.principia) p += 4 / (1 + hexDistance(spot, c));
+    if (c.principia) p += (unit.faction === 'germania' ? 4 : 1.2) / (1 + hexDistance(spot, c));
     if (c.gate) p += 2 / (1 + hexDistance(spot, c));
     if (c.terrain === 'causeway') p += 1.2 / (1 + hexDistance(spot, c));
     if (c.eagle) p += 2 / (1 + hexDistance(spot, c));

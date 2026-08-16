@@ -355,6 +355,71 @@ wwwwwwwwwwwwwwwwwwww
     ],
     hints: ['This is the open field Rome was built for.', 'Flank with cavalry. Hold the center with steel.', 'Arminius falling is glory, not the requirement.'],
   },
+
+  {
+    id: 'angrivarian',
+    index: 5,
+    year: '16 AD',
+    title: 'The Angrivarian Wall',
+    subtitle: 'Agger Angrivarorum',
+    briefing:
+      'Idistaviso did not end it. Arminius rallies behind a turf-and-timber bank that marks the Angrivarii from the Cherusci. Storm the wall. Do not let the host slip back into the trees.',
+    victoryText: 'The bank is Roman. The last warbands break for the timber. Germanicus has his field — and Tiberius will still call him home.',
+    briefingArt: 'briefing-idistaviso.png',
+    weather: 'fair',
+    maxTurns: 14,
+    cols: 18,
+    rows: 13,
+    map: `
+hhhhhhhhhhhhhhhhhh
+hhllllllllllllllhh
+hllccccloooocccclh
+llcccccloooocccccl
+cccccccloooocccccc
+cccccccclllcccccccc
+cccccccccccccccccc
+llcccccccccccccccc
+llllccccccccccccll
+ddlllccccccccclldd
+ddddllllcccclllddd
+ddddddlllllllldddd
+dddddddddddddddddd
+`,
+    markers: [
+      { col: 8, row: 3, props: {} },
+    ],
+    coreSlots: CORE_10(1, 6, 2),
+    units: [
+      { typeId: 'germanicus', col: 2, row: 6, name: 'Germanicus' },
+      { typeId: 'scorpio', col: 3, row: 5 },
+      { typeId: 'engineers', col: 3, row: 7 },
+      { typeId: 'warband', col: 8, row: 2, entrench: 4 },
+      { typeId: 'warband', col: 9, row: 3, entrench: 4 },
+      { typeId: 'warband', col: 10, row: 2, entrench: 4 },
+      { typeId: 'nobles', col: 9, row: 4, entrench: 3 },
+      { typeId: 'hunters', col: 11, row: 3, hidden: true },
+      { typeId: 'skirmishers', col: 7, row: 4 },
+      { typeId: 'ambushers', col: 12, row: 9, hidden: true },
+      { typeId: 'lightHorse', col: 14, row: 6 },
+      { typeId: 'arminius', col: 10, row: 1, name: 'Arminius', entrench: 2 },
+    ],
+    scripts: [
+      { turn: 6, weather: 'rain' },
+      {
+        turn: 7,
+        spawn: [
+          { typeId: 'warband', col: 16, row: 4 },
+          { typeId: 'warband', col: 15, row: 8 },
+        ],
+      },
+    ],
+    objectives: [
+      { id: 'wall', type: 'occupy', col: 9, row: 3, required: true, text: 'Take the Angrivarian wall' },
+      { id: 'hero', type: 'survive', unit: 'germanicus', required: true, text: 'Germanicus must live' },
+      { id: 'arm', type: 'heroDown', required: false, text: 'Kill or rout Arminius' },
+    ],
+    hints: ['Scorpiones and immunes before the eagles.', 'The wall is entrenched. Soften it.', 'Rain will come. Cross before the bank turns to soup.'],
+  },
 ];
 
 export const CAMPAIGN_INTRO = {

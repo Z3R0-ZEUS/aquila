@@ -136,6 +136,16 @@ export function combatContext(battle, attacker, defender, opts = {}) {
     if (defender.experience >= 2) mods.push({ label: 'Defender veterans', val: Math.floor(defender.experience / 2), side: 'def' });
   }
 
+  if (defender.testudo) {
+    if (isMissile) {
+      def += 2;
+      mods.push({ label: 'Testudo', val: 2, side: 'def' });
+    } else {
+      def += 1;
+      mods.push({ label: 'Testudo', val: 1, side: 'def' });
+    }
+  }
+
   if (defender.entrench && !isMissile) {
     def += defender.entrench;
     mods.push({ label: 'Entrenchment', val: defender.entrench, side: 'def' });

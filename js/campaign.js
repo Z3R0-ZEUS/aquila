@@ -1,8 +1,14 @@
 import { SCENARIOS, CAMPAIGN_ENDING } from './data/scenarios.js';
 import { UNIT_TYPES, SHOP_TYPES, makeUnit } from './data/units.js';
 
-const SAVE_KEY = 'aquila-save-v1';
+const SAVE_KEY = 'aquila-save-v2';
 const MAX_SLOTS = 14;
+
+export const DIFFICULTIES = {
+  recruit: { label: 'Recruit', honors: 110, blurb: 'Softer enemies. Room to learn the woods.' },
+  seasoned: { label: 'Seasoned', honors: 80, blurb: 'The Rhine as Germanicus found it.' },
+  veteran: { label: 'Veteran', honors: 50, blurb: 'Harder warbands. The forest does not forgive.' },
+};
 
 export function defaultCore() {
   const list = [
@@ -25,14 +31,17 @@ export function defaultCore() {
   }));
 }
 
-export function newCampaign() {
+export function newCampaign(difficulty = 'seasoned') {
+  const d = DIFFICULTIES[difficulty] || DIFFICULTIES.seasoned;
   return {
-    honors: 80,
+    honors: d.honors,
     mission: 0,
     core: defaultCore(),
     eagle: false,
     extractedLast: 0,
     history: [],
+    difficulty,
+    battleSave: null,
     created: Date.now(),
   };
 }
@@ -43,12 +52,27 @@ export function saveCampaign(c) {
 
 export function loadCampaign() {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
+    const raw = localStorage.getItem(SAVE_KEY) || localStorage.getItem('aquila-save-v1');
     if (!raw) return null;
-    return JSON.parse(raw);
+    const c = JSON.parse(raw);
+    if (!c.difficulty) c.difficulty = 'seasoned';
+    if (!('battleSave' in c)) c.battleSave = null;
+    return c;
   } catch {
     return null;
   }
+}
+
+export function saveBattle(c, battle) {
+  if (!c || !battle || battle.mode !== 'campaign') return;
+  c.battleSave = battle.toJSON();
+  saveCampaign(c);
+}
+
+export function clearBattleSave(c) {
+  if (!c) return;
+  c.battleSave = null;
+  saveCampaign(c);
 }
 
 export function clearCampaign() {
@@ -132,6 +156,10 @@ export function applyBattleResult(c, battle) {
         maxStrength: live.maxStrength,
       });
     }
+  }
+  c.battleSave = null;
+  if (battle.mode === 'skirmish') {
+    return { next: battle.result.kind === 'defeat' ? 'retry' : 'title', ending: null, skirmish: true };
   }
   if (battle.result.kind === 'defeat') {
     c.history.push({
