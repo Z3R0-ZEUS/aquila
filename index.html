@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aquila — Germanicus and the Lost Eagles</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div id="app">
+    <section id="screen-title" class="screen show">
+      <div class="veil">
+        <div class="kicker">Germanicus · 14–16 AD</div>
+        <h1>AQUILA</h1>
+        <p class="sub">The eagles of Varus still sleep in German earth. Take the Rhine army into the timber and bring one home.</p>
+        <div class="actions">
+          <button class="gold" id="btn-new">New campaign</button>
+          <button class="ghost" id="btn-continue" hidden>Continue</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-briefing" class="screen">
+      <div class="frame">
+        <div id="briefing-art" class="frame-art"></div>
+        <div class="frame-copy">
+          <div class="year" id="briefing-year"></div>
+          <h2 id="briefing-title"></h2>
+          <div class="cinzel" id="briefing-sub"></div>
+          <p class="lede" id="briefing-text"></p>
+          <div class="meta-row"><span>Honors <b id="briefing-honors">0</b></span></div>
+          <h3 class="cinzel">Orders</h3>
+          <ul id="briefing-objs"></ul>
+          <h3 class="cinzel">Counsel</h3>
+          <ul id="briefing-hints"></ul>
+          <div class="actions" style="margin-top:1rem">
+            <button class="gold" id="btn-deploy">Deploy</button>
+            <button class="ghost" id="btn-brief-back">Camp</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-battle" class="screen">
+      <canvas id="map"></canvas>
+      <div id="hud-top">
+        <div class="brand">AQUILA</div>
+        <div class="stat"><span id="hud-turn">Turn 1</span> · <span id="hud-weather">Fair</span> · <b id="hud-phase">Your move</b></div>
+        <button class="ghost compact" id="btn-mute" type="button">Sound on</button>
+      </div>
+      <div id="hud-left">
+        <div class="panel">
+          <h3>Orders</h3>
+          <ul id="hud-objs"></ul>
+        </div>
+        <div class="panel" id="portrait-card"></div>
+        <button class="gold" id="btn-end">End turn</button>
+      </div>
+      <div id="hud-right">
+        <div class="panel">
+          <h3>Dispatches</h3>
+          <div id="hud-log"></div>
+        </div>
+      </div>
+      <div id="hextip"></div>
+      <div id="combat-preview"></div>
+    </section>
+
+    <section id="screen-aar" class="screen">
+      <div class="frame">
+        <div class="frame-art" style="background-image:url(assets/briefings/title.png)"></div>
+        <div class="frame-copy">
+          <div class="year">After-action</div>
+          <h2 id="aar-kind">Victory</h2>
+          <p class="lede" id="aar-text"></p>
+          <div class="meta-row"><span id="aar-honors"></span></div>
+          <div id="aar-cas"></div>
+          <div class="actions" style="margin-top:1.4rem">
+            <button class="gold" id="aar-next">Continue</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-shop" class="screen">
+      <div class="frame">
+        <div class="frame-copy shop-copy" style="grid-column:1/-1">
+          <div class="year">Winter quarters</div>
+          <h2>The Rhine camp</h2>
+          <div class="meta-row">
+            <span>Honors <b id="shop-honors">0</b></span>
+            <span>Core slots <b id="shop-slots">0 / 12</b></span>
+            <span id="shop-next"></span>
+          </div>
+          <div id="shop-grid">
+            <div>
+              <h3 class="cinzel">Your core</h3>
+              <div id="shop-roster"></div>
+            </div>
+            <div>
+              <h3 class="cinzel">Hire</h3>
+              <div id="shop-cat"></div>
+            </div>
+          </div>
+          <div class="actions" style="margin-top:1rem">
+            <button class="gold" id="btn-next-mission">March</button>
+            <button class="ghost" id="btn-shop-title">Title</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-ending" class="screen">
+      <div class="veil">
+        <div class="kicker">Roma · 16 AD</div>
+        <h2>The eagles</h2>
+        <p id="ending-text"></p>
+        <button class="gold" id="btn-end-title">Return</button>
+      </div>
+    </section>
+  </div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

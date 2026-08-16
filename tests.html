@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Aquila tests</title>
+  <style>
+    body { background: #111; color: #ddd; font: 16px/1.4 Georgia, serif; padding: 2rem; }
+    .ok { color: #9dcc7a; }
+    .bad { color: #e07060; }
+  </style>
+</head>
+<body>
+  <h1>Aquila tests</h1>
+  <pre id="out">running…</pre>
+  <script type="module">
+    try {
+      const { runTests } = await import('./js/tests.js');
+      const { results, failed, passed } = runTests();
+      const lines = results.map((r) => `${r.ok ? 'PASS' : 'FAIL'}  ${r.name}`);
+      lines.push('', `${passed} passed, ${failed.length} failed`);
+      document.getElementById('out').textContent = lines.join('\n');
+      document.getElementById('out').className = failed.length ? 'bad' : 'ok';
+    } catch (err) {
+      document.getElementById('out').className = 'bad';
+      document.getElementById('out').textContent = String(err && err.stack || err);
+    }
+  </script>
+</body>
+</html>
