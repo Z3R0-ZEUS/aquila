@@ -1,5 +1,5 @@
 import { hexDistance, offsetToAxial, neighbors } from './hex.js';
-import { killChance, previewCombat, resolveCombat, applyHits } from './combat.js';
+import { killChance, previewCombat, resolveCombat, applyHits, inMissileRange } from './combat.js';
 import { Battle, restoreBattle } from './game.js';
 import { SCENARIOS } from './data/scenarios.js';
 import { defaultCore } from './campaign.js';
@@ -47,7 +47,13 @@ export function runTests() {
 
   const doomed = makeUnit('warband', { q: 2, r: 0, strength: 3 });
   applyHits(doomed, 2, 1);
+  assert('hits match the roll', doomed.strength === 1);
+  applyHits(doomed, 1, 0);
   assert('wounded unit can be destroyed', doomed.strength === 0);
+
+  const weak = makeUnit('warband', { strength: 4 });
+  const slain = applyHits(weak, 1, 0);
+  assert('one kill is one kill', slain === 1 && weak.strength === 3);
 
   let killed = false;
   for (let i = 0; i < 8 && !killed; i++) {
@@ -253,6 +259,82 @@ export function runTests() {
 
   assert('point cost positive', reinforcePointCost(makeUnit('legion')) >= 3);
   assert('affordable points respect purse', affordablePoints(makeUnit('legion', { strength: 1 }), 8) >= 1);
+
+  const losBat = new Battle(SCENARIOS[0], { core: defaultCore(), seed: 21, skipDeploy: true });
+  const bow = makeUnit('sagittarii', { q: 0, r: 0, ammo: 3 });
+  const screened = makeUnit('warband', { q: 2, r: 0 });
+  const close = makeUnit('warband', { q: 1, r: 0 });
+  bow.inSupply = true;
+  losBat.units.push(bow, screened, close);
+  const mid = losBat.cell(1, 0);
+  if (mid) mid.terrain = 'denseForest';
+  assert('no missile through timber', inMissileRange(losBat, bow, screened) === false);
+  assert('adjacent missile still legal', inMissileRange(losBat, bow, close) === true);
+
+  const rngBat = new Battle(SCENARIOS[0], { core: defaultCore(), seed: 33, skipDeploy: true });
+  rngBat.rng();
+  rngBat.rng();
+  const rngAgain = restoreBattle(rngBat.toJSON());
+  const twin = new Battle(SCENARIOS[0], { core: defaultCore(), seed: 33, skipDeploy: true });
+  twin.rng();
+  twin.rng();
+  assert('restore continues rng', rngAgain.rng() === twin.rng());
+
+  const fatCore = defaultCore();
+  while (fatCore.length < 12) {
+    fatCore.push({
+      id: `core-extra-${fatCore.length}`,
+      typeId: 'auxilia',
+      name: `Extra ${fatCore.length}`,
+      strength: 10,
+      maxStrength: 10,
+      experience: 0,
+    });
+  }
+  const fat = new Battle(SCENARIOS[0], { core: fatCore, seed: 4, skipDeploy: true });
+  assert('overflow core is placed', fat.units.filter((u) => u.core).length >= 12);
+
+  const tribes = new Battle(SCENARIOS[1], { core: defaultCore(), playerFaction: 'germania', seed: 5, skipDeploy: true });
+  const romans = tribes.units.filter((u) => u.faction === 'rome' && u.strength > 0);
+  tribes.flags.romeStart = romans.length;
+  romans.forEach((u, i) => { if (i > 0) u.strength = 0; });
+  tribes.updateObjectives();
+  tribes.checkEnd();
+  assert('tribes can win chatti without burn', tribes.result && tribes.result.kind !== 'defeat');
+
+  const pont = new Battle(SCENARIOS[2], { core: defaultCore(), playerFaction: 'germania', seed: 6, skipDeploy: true });
+  const band = pont.units.find((u) => u.faction === 'germania' && u.strength > 0);
+  const exitHex = [...pont.cells.values()].find((c) => c.extract);
+  assert('pontes has extract hex', !!exitHex && !!band);
+  if (band && exitHex) {
+    band.q = exitHex.q;
+    band.r = exitHex.r;
+    pont.checkSpecialHex(band);
+    assert('tribes do not extract on pontes', band.strength > 0 && !band.extracted);
+  }
+
+  const ov = new Battle(SCENARIOS[4], { core: defaultCore(), seed: 8, skipDeploy: true });
+  const horse = makeUnit('equites', { q: 5, r: 5 });
+  const prey = makeUnit('warband', { q: 6, r: 5, strength: 1 });
+  horse.inSupply = true;
+  ov.units.push(horse, prey);
+  ov.rng = () => 0.01;
+  ov.tryAttack(horse, prey, { missile: false });
+  assert('overrun occupies the hex', horse.q === 6 && horse.r === 5 && prey.strength === 0);
+
+  const zocBat = new Battle(SCENARIOS[0], { core: defaultCore(), seed: 10, skipDeploy: true });
+  const walker = makeUnit('auxilia', { q: 2, r: 5 });
+  walker.mpRemaining = 8;
+  const presser = makeUnit('warband', { q: 3, r: 5 });
+  zocBat.units.push(walker, presser);
+  const leave = reachable(zocBat, walker).hexes;
+  assert('can leave a zoc', leave.length > 0);
+
+  const idSnap = new Battle(SCENARIOS[0], { core: defaultCore(), seed: 11, skipDeploy: true });
+  const restored = restoreBattle(idSnap.toJSON());
+  const liveIds = new Set(restored.units.map((u) => u.id));
+  const freshHire = makeUnit('auxilia', { q: 0, r: 0 });
+  assert('restore does not reuse live ids', !liveIds.has(freshHire.id));
 
   const failed = results.filter((r) => !r.ok);
   return { results, failed, passed: results.length - failed.length };

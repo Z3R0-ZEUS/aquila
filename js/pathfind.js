@@ -16,7 +16,6 @@ export function reachable(battle, unit) {
   const t = typeOf(unit);
   const ignoreZoc = t.traits.includes('ignoreZoc') || t.traits.includes('skirmish');
   const zoc = ignoreZoc ? new Set() : enemyZocKeys(battle, unit.faction);
-  const startInZoc = zoc.has(key(unit.q, unit.r));
   const start = key(unit.q, unit.r);
   const best = new Map();
   best.set(start, { cost: 0, prev: null, q: unit.q, r: unit.r });
@@ -27,7 +26,7 @@ export function reachable(battle, unit) {
     const cur = q.shift();
     const ck = key(cur.q, cur.r);
     if (cur.cost !== best.get(ck).cost) continue;
-    if (cur.cost > 0 && zoc.has(ck) && !ignoreZoc && !startInZoc) continue;
+    if (cur.cost > 0 && zoc.has(ck) && !ignoreZoc) continue;
 
     for (const n of neighbors(cur)) {
       const cell = battle.cell(n.q, n.r);

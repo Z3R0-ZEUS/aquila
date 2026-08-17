@@ -224,6 +224,10 @@ function confirmSetup() {
     startSkirmish();
     return;
   }
+  const existing = loadCampaign();
+  if (existing && !window.confirm('A campaign is already marked. Begin a new one and lose it?')) {
+    return;
+  }
   campaign = newCampaign(setup.difficulty);
   saveCampaign(campaign);
   ui.renderPrologue(CAMPAIGN_INTRO);
@@ -363,6 +367,7 @@ async function endTurn() {
   }
   await wait(400);
   battle.beginPlayerTurn();
+  persistBattle();
   ui.renderBattle(battle);
   maybeEnd();
 }
@@ -373,6 +378,7 @@ function wait(ms) {
 
 function onMapClick(sx, sy, button) {
   if (!battle || !battle.playerCanOrder() || battle.result) return;
+  ui.hidePreview();
   if (button === 2) {
     battle.selectedId = null;
     battle.cancelPurchase();
@@ -437,7 +443,7 @@ function onMapClick(sx, sy, button) {
         }
       }
     }
-    const missile = !canMelee(sel, unit) && (inMissileRange(battle, sel, unit) || (typeOf(sel).range > 0 && sel.ammo > 0 && hexDistance(sel, unit) <= typeOf(sel).range));
+    const missile = !canMelee(sel, unit) && inMissileRange(battle, sel, unit);
     if (!canMelee(sel, unit) && !missile) {
       ui.renderBattle(battle);
       return;
@@ -448,6 +454,7 @@ function onMapClick(sx, sy, button) {
       if (res) {
         combatSound(missile, res);
         view.playCombat(sel, unit, res, missile);
+        persistBattle();
       }
       ui.renderBattle(battle);
       maybeEnd();
@@ -583,6 +590,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'y' || e.key === 'Y') orderSelected('rally');
   if (e.key === 'c' || e.key === 'C') orderSelected('scout');
   if (e.key === 'l' || e.key === 'L') orderSelected('ambush');
+  if (e.key === 't' || e.key === 'T') orderSelected('testudo');
 });
 window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 

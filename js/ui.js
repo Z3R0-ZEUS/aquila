@@ -242,7 +242,7 @@ export class UI {
       actions.push(`<button data-act="dig">Throw up works (G)</button>`);
     }
     if (canTestudo(battle, unit).ok) {
-      actions.push(`<button data-act="testudo">${unit.testudo ? 'Break testudo' : 'Form testudo'}</button>`);
+      actions.push(`<button data-act="testudo">${unit.testudo ? 'Break testudo' : 'Form testudo'} (T)</button>`);
     }
     if (t.traits.includes('engineer') && play && !unit.acted) {
       actions.push(`<button data-act="engineer">Repair / Fortify</button>`);
@@ -285,7 +285,7 @@ export class UI {
         <div class="cp-side">
           <img class="cp-art" src="assets/portraits/${typeOf(attacker).portrait}" alt="" />
           <div>${attacker.name}</div>
-          <div class="exp">deal ~${prev.toDefender.kills.toFixed(1)} slain / ${prev.toDefender.disorder.toFixed(1)} disorder</div>
+          <div class="exp">deal ~${prev.toDefender.kills.toFixed(1)} slain / ${prev.toDefender.disorder.toFixed(1)} disorder${retreatHint(prev.retreat)}</div>
         </div>
         <div class="cp-vs">⚔</div>
         <div class="cp-side">
@@ -297,7 +297,7 @@ export class UI {
       <div class="cp-meta">ATK ${ctx.atk} vs DEF ${ctx.def} · Init ${ctx.aInit} / ${ctx.dInit}${prev.firstStrike ? ' · first strike' : ''}${prev.defenderFirst ? ' · they strike first' : ''}</div>
       <ul class="cp-mods">${mods || '<li>No modifiers</li>'}</ul>
       <div class="cp-acts">
-        <button class="ghost" id="cp-cancel">Hold</button>
+        <button class="ghost" id="cp-cancel">Cancel</button>
         <button class="gold" id="cp-go">Commit</button>
       </div>`;
     el.querySelector('#cp-go').onclick = () => {
@@ -404,6 +404,12 @@ export class UI {
     this.show('screen-ending');
     this.root.querySelector('#ending-text').textContent = text;
   }
+}
+
+function retreatHint(kind) {
+  if (kind === 'rout') return ' · likely rout';
+  if (kind === 'retreat') return ' · may fall back';
+  return '';
 }
 
 function weatherLabel(w) {

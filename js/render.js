@@ -242,7 +242,7 @@ export class MapView {
         if (e.strength <= 0 || e.faction === sel.faction || (e.hidden && hexDistance(sel, e) > 1)) continue;
         if (sel.forcedMarch) continue;
         if (canMelee(sel, e)) atkSet.set(`${e.q},${e.r}`, 'melee');
-        else if (inMissileRange(battle, sel, e) || (typeOf(sel).range > 0 && sel.ammo > 0 && hexDistance(sel, e) <= typeOf(sel).range)) {
+        else if (inMissileRange(battle, sel, e)) {
           atkSet.set(`${e.q},${e.r}`, 'missile');
         }
       }

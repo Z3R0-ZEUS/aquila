@@ -63,6 +63,7 @@ function actUnit(battle, unit) {
         if (score > best.score) best = { score, spot, target: e, missile: false, melee: true };
       } else if (t.range > 0 && unit.ammo > 0 && d <= t.range && d >= 1) {
         const fake = { ...unit, q: spot.q, r: spot.r };
+        if (d > 1 && !inMissileRange(battle, fake, e)) continue;
         const prev = previewCombat(battle, fake, e, { missile: true });
         const score = stand + attackScore(prev, unit, e) * 0.85 + (d > 1 ? 0.4 : 0);
         if (score > best.score) best = { score, spot, target: e, missile: true, melee: false };
@@ -87,12 +88,11 @@ function actUnit(battle, unit) {
   }
 
   if (best.spot.q !== unit.q || best.spot.r !== unit.r) {
-    unit.q = best.spot.q;
-    unit.r = best.spot.r;
-    unit.moved = true;
-    unit.entrench = 0;
-    unit.testudo = false;
-    unit.mpRemaining = Math.max(0, unit.mpRemaining - (best.spot.cost || 0));
+    const moved = battle.tryMove(unit, best.spot.q, best.spot.r);
+    if (!moved) {
+      unit.acted = true;
+      return { type: 'move', unit, to: { q: unit.q, r: unit.r } };
+    }
     if (unit.hidden && TERRAIN[battle.cell(unit.q, unit.r)?.terrain]?.id === 'clear') unit.hidden = false;
   }
 
@@ -112,6 +112,7 @@ function bestShot(battle, unit, enemies) {
   for (const e of enemies) {
     const d = hexDistance(unit, e);
     if (d < 1 || d > t.range) continue;
+    if (!inMissileRange(battle, unit, e)) continue;
     const prev = previewCombat(battle, unit, e, { missile: true });
     const score = attackScore(prev, unit, e);
     if (!best || score > best.score) best = { target: e, score };

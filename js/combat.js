@@ -1,4 +1,4 @@
-import { hexDistance, neighbors } from './hex.js';
+import { hexDistance, neighbors, hexLine } from './hex.js';
 import { TERRAIN } from './data/terrain.js';
 import { typeOf, effectiveStrength } from './data/units.js';
 
@@ -243,24 +243,32 @@ export function previewCombat(battle, attacker, defender, opts = {}) {
     const first = expectedLosses(ctx, ctx.dStrikes, retDiff);
     const reduced = Math.max(1, ctx.aStrikes - Math.round(first.kills));
     atkOnDefender = expectedLosses(ctx, reduced, ctx.diff);
-    return {
+    return withRetreatHint({
       ctx,
       firstStrike: false,
       defenderFirst: true,
       toDefender: atkOnDefender,
       toAttacker: first,
       canReturn: true,
-    };
+    }, defender);
   }
 
-  return {
+  return withRetreatHint({
     ctx,
     firstStrike,
     defenderFirst: false,
     toDefender: atkOnDefender,
     toAttacker: defExp,
     canReturn: canReturn && !noReturn,
-  };
+  }, defender);
+}
+
+function withRetreatHint(prev, defender) {
+  prev.retreat = shouldRetreat(
+    { ...defender, strength: Math.max(0, defender.strength - Math.round(prev.toDefender.kills)) },
+    prev.toDefender.kills
+  );
+  return prev;
 }
 
 function returnDiff(battle, attacker, defender, ctx) {
@@ -286,17 +294,9 @@ function rollStrikes(rng, strikes, kChance, dChance) {
 
 export function applyHits(unit, kills, disorder) {
   let k = Math.max(0, Math.round(kills));
-  const wounded = unit.strength <= 5 || unit.disorder >= Math.ceil(unit.strength * 0.4);
-  if (wounded) k += 1;
-  if (unit.strength - k <= 2 && k >= 1) k = unit.strength;
   k = Math.min(unit.strength, k);
   unit.strength -= k;
   unit.disorder = Math.min(unit.strength, unit.disorder + Math.max(0, Math.round(disorder)));
-  if (unit.strength > 0 && unit.disorder >= unit.strength && unit.strength <= 5) {
-    k += unit.strength;
-    unit.strength = 0;
-    unit.disorder = 0;
-  }
   if (unit.strength <= 0) {
     unit.strength = 0;
     unit.disorder = 0;
@@ -400,7 +400,6 @@ export function inMissileRange(battle, attacker, defender) {
 }
 
 function hasLine(battle, a, b) {
-  const { hexLine } = waitLine();
   const line = hexLine(a, b);
   for (let i = 1; i < line.length - 1; i++) {
     const c = battle.cell(line[i].q, line[i].r);
@@ -409,30 +408,6 @@ function hasLine(battle, a, b) {
     if (battle.unitAt(line[i].q, line[i].r)) return false;
   }
   return true;
-}
-
-function waitLine() {
-  return { hexLine: (a, b) => {
-    const n = hexDistance(a, b);
-    if (n === 0) return [{ q: a.q, r: a.r }];
-    const out = [];
-    for (let i = 0; i <= n; i++) {
-      const t = i / n;
-      const q = a.q + (b.q - a.q) * t;
-      const r = a.r + (b.r - a.r) * t;
-      const s = -q - r;
-      let rq = Math.round(q);
-      let rr = Math.round(r);
-      let rs = Math.round(s);
-      const qDiff = Math.abs(rq - q);
-      const rDiff = Math.abs(rr - r);
-      const sDiff = Math.abs(rs - s);
-      if (qDiff > rDiff && qDiff > sDiff) rq = -rr - rs;
-      else if (rDiff > sDiff) rr = -rq - rs;
-      out.push({ q: rq, r: rr });
-    }
-    return out;
-  } };
 }
 
 export function canMelee(attacker, defender) {

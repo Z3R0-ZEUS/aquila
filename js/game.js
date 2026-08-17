@@ -175,14 +175,22 @@ export class Battle {
     }
     const core = opts.core || [];
     const corePlacements = (scenario.coreSlots || []).slice();
-    let ci = 0;
-    for (const cu of core) {
-      const slot = corePlacements[ci++];
-      if (!slot) break;
-      const { offsetToAxial } = axial();
-      const { q, r } = offsetToAxial(slot.col, slot.row);
-      const spot = this.findEmpty(q, r);
-      if (!spot) continue;
+    let lastSpot = null;
+    for (let i = 0; i < core.length; i++) {
+      const cu = core[i];
+      let spot = null;
+      const slot = corePlacements[i];
+      if (slot) {
+        const { q, r } = offsetToAxial(slot.col, slot.row);
+        spot = this.findEmpty(q, r);
+      }
+      if (!spot && lastSpot) spot = this.findEmpty(lastSpot.q, lastSpot.r);
+      if (!spot) spot = this.findAnyEmpty();
+      if (!spot) {
+        this.pushLog(`${cu.name || cu.typeId} could not take the field.`);
+        continue;
+      }
+      lastSpot = spot;
       const u = makeUnit(cu.typeId, {
         ...cu,
         q: spot.q,
@@ -192,6 +200,14 @@ export class Battle {
       });
       this.units.push(u);
     }
+  }
+
+  findAnyEmpty() {
+    for (const c of this.cells.values()) {
+      if (TERRAIN[c.terrain]?.impassable) continue;
+      if (!this.unitAt(c.q, c.r)) return { q: c.q, r: c.r };
+    }
+    return null;
   }
 
   applyDifficulty() {
@@ -516,20 +532,23 @@ export class Battle {
 
   tryMove(unit, q, r) {
     if (this.phase === 'deploy') return this.tryDeployMove(unit, q, r);
-    if (this.phase !== 'player' || unit.faction !== this.playerFaction || unit.acted) return null;
+    const acting = this.phaseToFaction();
+    if ((this.phase !== 'player' && this.phase !== 'ai') || unit.faction !== acting || unit.acted) return null;
     const { hexes, cameFrom } = reachable(this, unit);
     const dest = hexes.find((h) => h.q === q && h.r === r);
     if (!dest) return null;
     const path = reconstructPath(cameFrom, unit, { q, r });
     const from = { q: unit.q, r: unit.r };
-    this.lastMove = {
-      id: unit.id,
-      q: unit.q,
-      r: unit.r,
-      mp: unit.mpRemaining,
-      entrench: unit.entrench,
-      testudo: !!unit.testudo,
-    };
+    if (this.phase === 'player') {
+      this.lastMove = {
+        id: unit.id,
+        q: unit.q,
+        r: unit.r,
+        mp: unit.mpRemaining,
+        entrench: unit.entrench,
+        testudo: !!unit.testudo,
+      };
+    }
     unit.q = q;
     unit.r = r;
     unit.mpRemaining -= dest.cost;
@@ -565,7 +584,7 @@ export class Battle {
       this.honorsEarned += 15;
       this.pushLog('The bones of Varus\'s men are given earth and prayer.');
     }
-    if (c.extract && unit.faction === this.playerFaction) {
+    if (c.extract && unit.faction === 'rome') {
       this.extracted.push(unit.id);
       unit.strength = 0;
       unit.extracted = true;
@@ -581,7 +600,7 @@ export class Battle {
     if (attacker.acted || attacker.strength <= 0 || defender.strength <= 0) return null;
     const missile = opts.missile ?? (inMissileRange(this, attacker, defender) && !canMelee(attacker, defender));
     if (!missile && !canMelee(attacker, defender)) return null;
-    if (missile && !inMissileRange(this, attacker, defender) && hexDistance(attacker, defender) > typeOf(attacker).range) return null;
+    if (missile && !inMissileRange(this, attacker, defender)) return null;
     const result = resolveCombat(this, attacker, defender, { missile });
     this.casualties[defender.faction] += result.aKills;
     this.casualties[attacker.faction] += result.dKills;
@@ -594,6 +613,21 @@ export class Battle {
       }
     }
     this.lastMove = null;
+    if (result.overrun && result.defenderDead) {
+      const dest = { q: defender.q, r: defender.r };
+      const cell = this.cell(dest.q, dest.r);
+      const cost = cell ? moveCost(cell.terrain, typeOf(attacker), this.weather) : Infinity;
+      if (cell && Number.isFinite(cost) && !this.unitAt(dest.q, dest.r)) {
+        attacker.q = dest.q;
+        attacker.r = dest.r;
+        attacker.entrench = 0;
+        attacker.testudo = false;
+        attacker.moved = true;
+        this.checkSpecialHex(attacker);
+        markSupply(this);
+        this.pushLog(`${attacker.name} overruns the hex.`);
+      }
+    }
     if (result.attackerDead && isHero(attacker) && attacker.faction === this.playerFaction) {
       this.result = { kind: 'defeat', title: 'The commander has fallen', text: `${attacker.name} is slain. The eagles dip.` };
     }
@@ -653,7 +687,8 @@ export class Battle {
       this.pushLog('The immunes rebuild the planking. The causeway holds.');
       return true;
     }
-    if (c.terrain !== 'castra' && !this.flags.castraBuilt) {
+    const canFortify = c.terrain === 'clear' || c.terrain === 'hill' || c.terrain === 'castra';
+    if (canFortify && !this.flags.castraBuilt) {
       c.terrain = 'castra';
       c.supplySource = true;
       this.flags.castraBuilt = true;
@@ -800,13 +835,18 @@ export class Battle {
         this.pushLog(`The weather turns: ${weatherName(s.weather)}.`);
       }
       if (s.spawn) {
+        let arrived = 0;
         for (const p of s.spawn) {
-          const { offsetToAxial } = axial();
           const { q, r } = offsetToAxial(p.col, p.row);
-          if (this.unitAt(q, r)) continue;
-          this.units.push(makeUnit(p.typeId, { q, r, hidden: p.hidden, name: p.name }));
+          const spot = this.findEmpty(q, r);
+          if (!spot) {
+            this.pushLog(`A ${p.name || p.typeId} could not reach the field.`);
+            continue;
+          }
+          this.units.push(makeUnit(p.typeId, { q: spot.q, r: spot.r, hidden: p.hidden, name: p.name }));
+          arrived += 1;
         }
-        this.pushLog('Warhorns in the trees. Fresh warbands come on.');
+        if (arrived) this.pushLog('Warhorns in the trees. Fresh warbands come on.');
       }
       if (s.breakCauseway) {
         for (const c of this.cells.values()) {
@@ -880,7 +920,7 @@ export class Battle {
     const enemiesLive = this.units.some((u) => u.faction === this.enemyFaction && u.strength > 0);
     const reqNonTimer = required.filter((o) => o.type !== 'holdUntil');
     const reqOk = required.length && required.every((o) => o.done);
-    const anyAlt = this.scenario.winAny
+    const anyAlt = this.scenario.winAny && this.playerFaction === 'rome'
       ? this.scenario.winAny.some((id) => this.objectives.find((o) => o.id === id)?.done)
       : true;
     const wiped = !enemiesLive && reqNonTimer.every((o) => o.done);
@@ -952,6 +992,7 @@ export class Battle {
       extracted: this.extracted,
       selectedId: this.selectedId,
       seed: this.seed,
+      rngState: typeof this.rng.state === 'function' ? this.rng.state() : undefined,
       log: this.log.slice(0, 24),
       units: this.units.map((u) => ({
         id: u.id,
@@ -1009,6 +1050,13 @@ export class Battle {
       ...makeUnit(u.typeId, u),
       ...u,
     }));
+    let nextId = 1;
+    for (const u of this.units) {
+      const m = String(u.id || '').match(/(\d+)$/);
+      if (m) nextId = Math.max(nextId, Number(m[1]) + 1);
+    }
+    resetUnitIds(nextId);
+    if (typeof data.rngState === 'number' && this.rng.setState) this.rng.setState(data.rngState);
     for (const c of data.cells || []) {
       const cell = this.cell(c.q, c.r);
       if (!cell) continue;

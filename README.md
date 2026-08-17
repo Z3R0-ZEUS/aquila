@@ -37,6 +37,7 @@ ES modules will not load from `file://`. Use the local server.
 - I: draw ammunition
 - X: forced march
 - G: throw up works
+- T: form / break testudo
 - Y: rally (commander)
 - C: scout (exploratores)
 - L: lie in wait (ambushers)
@@ -65,7 +66,7 @@ Selected units show the actions they can take.
 - **Repair / Fortify** — immunes rebuild a causeway or raise a marching camp.
 - **Torch** — burn a Chatti village.
 
-Core units persist between the six missions. Spend **Honors** in winter quarters — or during deployment — on replacements and new cohorts.
+Core units persist between the six missions (14 slots). Spend **Honors** in winter quarters — or during deployment — on replacements and new cohorts.
 
 ## Campaign
 
