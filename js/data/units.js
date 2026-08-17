@@ -480,6 +480,16 @@ export const SHOP_TYPES = [
   'engineers',
 ];
 
+export const GERMAN_SHOP_TYPES = [
+  'warband',
+  'nobles',
+  'skirmishers',
+  'hunters',
+  'lightHorse',
+  'ambushers',
+  'raiders',
+];
+
 export function typeOf(unit) {
   return UNIT_TYPES[unit.typeId];
 }
@@ -509,9 +519,14 @@ export function makeUnit(typeId, extras = {}) {
     acted: false,
     mpRemaining: t.move,
     hidden: extras.hidden ?? t.traits.includes('hiddenStart'),
-    chargedThisTurn: false,
+    chargedThisTurn: extras.chargedThisTurn ?? false,
     core: extras.core ?? false,
     facing: extras.facing ?? 0,
+    testudo: extras.testudo ?? false,
+    forcedMarch: extras.forcedMarch ?? false,
+    hiredThisBattle: extras.hiredThisBattle ?? false,
+    extracted: extras.extracted ?? false,
+    inSupply: extras.inSupply ?? true,
   };
 }
 

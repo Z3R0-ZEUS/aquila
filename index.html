@@ -78,7 +78,7 @@
       <canvas id="map"></canvas>
       <div id="hud-top">
         <div class="brand">AQUILA</div>
-        <div class="stat"><span id="hud-turn">Turn 1</span> · <span id="hud-weather">Fair</span> · <b id="hud-phase">Your move</b></div>
+        <div class="stat"><span id="hud-turn">Turn 1</span> · <span id="hud-weather">Fair</span> · Honors <b id="hud-honors">0</b> · <b id="hud-phase">Your move</b></div>
         <button class="ghost compact" id="btn-mute" type="button">Sound on</button>
       </div>
       <div id="hud-left">
@@ -96,6 +96,11 @@
         </div>
       </div>
       <div id="hud-right">
+        <div class="panel" id="deploy-panel" hidden>
+          <h3>Levy</h3>
+          <p class="deploy-hint" id="deploy-hint">Gold hexes are your deployment. Spend honors to raise a cohort, then click an empty gold hex.</p>
+          <div id="deploy-cat"></div>
+        </div>
         <div class="panel">
           <h3>Dispatches</h3>
           <div id="hud-log"></div>

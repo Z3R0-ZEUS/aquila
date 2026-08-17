@@ -105,13 +105,20 @@ let keys = new Set();
 let setup = { kind: 'campaign', difficulty: 'seasoned', faction: 'rome', scenarioId: null };
 
 const ui = new UI(app, {
-  onSpecial(act, unit) {
-    if (!battle || battle.phase !== 'player') return;
-    if (act === 'engineer') battle.engineerAction(unit);
-    if (act === 'burn') battle.burnVillage(unit);
-    if (act === 'testudo') battle.toggleTestudo(unit);
+  onSpecial(act, unit, extra) {
+    if (!battle || !battle.playerCanOrder()) return;
+    if (battle.doSpecial(act, unit, extra)) {
+      sfx.ui();
+      persistBattle();
+    }
     ui.renderBattle(battle);
     maybeEnd();
+  },
+  onDeployBuy(typeId) {
+    if (!battle || battle.phase !== 'deploy') return;
+    if (battle.pendingBuy === typeId) battle.cancelPurchase();
+    else if (battle.startPurchase(typeId)) sfx.click();
+    ui.renderBattle(battle);
   },
   onShop(kind, id) {
     if (!campaign) return;
@@ -209,7 +216,7 @@ function startSkirmish() {
   const sc = SCENARIOS.find((s) => s.id === setup.scenarioId) || SCENARIOS[0];
   campaign = campaign || newCampaign(setup.difficulty);
   battle = new Battle(sc, {
-    core: setup.faction === 'rome' ? defaultCoreSafe() : defaultCoreSafe(),
+    core: defaultCoreSafe(),
     playerFaction: setup.faction,
     difficulty: setup.difficulty,
     mode: 'skirmish',
@@ -248,6 +255,7 @@ function deploy() {
     playerFaction: 'rome',
     difficulty: campaign.difficulty || 'seasoned',
     mode: 'campaign',
+    honors: campaign.honors,
   });
   ui.renderBattle(battle);
   requestAnimationFrame(() => {
@@ -276,7 +284,16 @@ function maybeEnd() {
 }
 
 async function endTurn() {
-  if (!battle || battle.phase !== 'player' || battle.result) return;
+  if (!battle || battle.result) return;
+  if (battle.phase === 'deploy') {
+    if (battle.beginBattle()) {
+      sfx.endTurn();
+      persistBattle();
+      ui.renderBattle(battle);
+    }
+    return;
+  }
+  if (battle.phase !== 'player') return;
   sfx.endTurn();
   battle.endPlayerTurn();
   ui.renderBattle(battle);
@@ -304,15 +321,27 @@ function wait(ms) {
 }
 
 function onMapClick(sx, sy, button) {
-  if (!battle || battle.phase !== 'player' || battle.result) return;
+  if (!battle || !battle.playerCanOrder() || battle.result) return;
   if (button === 2) {
     battle.selectedId = null;
+    battle.cancelPurchase();
     ui.hidePreview();
     ui.renderBattle(battle);
     return;
   }
   const hex = view.hexAtScreen(sx, sy);
+  if (!hex || !battle.cell(hex.q, hex.r)) return;
   const unit = battle.unitAt(hex.q, hex.r);
+
+  if (battle.phase === 'deploy' && battle.pendingBuy) {
+    const placed = battle.placePurchase(hex.q, hex.r);
+    if (placed) {
+      sfx.click();
+      persistBattle();
+    }
+    ui.renderBattle(battle);
+    return;
+  }
 
   if (unit && unit.faction === battle.playerFaction) {
     battle.select(unit.id);
@@ -323,7 +352,18 @@ function onMapClick(sx, sy, button) {
   }
 
   const sel = battle.selected;
-  if (!sel || sel.acted) return;
+  if (!sel) return;
+  if (battle.phase === 'deploy') {
+    const moved = battle.tryDeployMove(sel, hex.q, hex.r);
+    if (moved) {
+      sfx.move();
+      view.playMove(moved.from, moved.to);
+      persistBattle();
+      ui.renderBattle(battle);
+    }
+    return;
+  }
+  if (sel.acted) return;
 
   if (unit && unit.faction === battle.enemyFaction && !unit.hidden) {
     const needMove = hexDistance(sel, unit) > 1 && !(typeOf(sel).range > 0 && sel.ammo > 0 && hexDistance(sel, unit) <= typeOf(sel).range);
@@ -373,8 +413,18 @@ function onMapClick(sx, sy, button) {
   }
 }
 
+function orderSelected(act) {
+  if (!battle || !battle.playerCanOrder() || !battle.selected) return;
+  if (battle.doSpecial(act, battle.selected)) {
+    sfx.ui();
+    persistBattle();
+    ui.renderBattle(battle);
+    maybeEnd();
+  }
+}
+
 function cycleUnit() {
-  if (!battle || battle.phase !== 'player') return;
+  if (!battle || !battle.playerCanOrder()) return;
   const u = battle.nextIdle();
   if (u) {
     sfx.select();
@@ -460,6 +510,14 @@ window.addEventListener('keydown', (e) => {
     holdUnit();
   }
   if (e.key === 'u' || e.key === 'U') undoUnit();
+  if (e.key === 'r' || e.key === 'R') orderSelected('reinforce');
+  if (e.key === 'v' || e.key === 'V') orderSelected('elite');
+  if (e.key === 'i' || e.key === 'I') orderSelected('resupply');
+  if (e.key === 'x' || e.key === 'X') orderSelected('march');
+  if (e.key === 'g' || e.key === 'G') orderSelected('dig');
+  if (e.key === 'y' || e.key === 'Y') orderSelected('rally');
+  if (e.key === 'c' || e.key === 'C') orderSelected('scout');
+  if (e.key === 'l' || e.key === 'L') orderSelected('ambush');
 });
 window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 

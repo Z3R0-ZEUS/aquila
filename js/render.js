@@ -232,10 +232,15 @@ export class MapView {
     const moveSet = new Set();
     const atkSet = new Map();
     const sel = battle.selected;
+    const deploySet = new Set();
+    if (battle.phase === 'deploy') {
+      for (const k of battle.deployKeys || []) deploySet.add(k);
+    }
     if (sel && battle.phase === 'player' && !sel.acted) {
       for (const hx of reachable(battle, sel).hexes) moveSet.add(`${hx.q},${hx.r}`);
       for (const e of battle.units) {
         if (e.strength <= 0 || e.faction === sel.faction || (e.hidden && hexDistance(sel, e) > 1)) continue;
+        if (sel.forcedMarch) continue;
         if (canMelee(sel, e)) atkSet.set(`${e.q},${e.r}`, 'melee');
         else if (inMissileRange(battle, sel, e) || (typeOf(sel).range > 0 && sel.ammo > 0 && hexDistance(sel, e) <= typeOf(sel).range)) {
           atkSet.set(`${e.q},${e.r}`, 'missile');
@@ -249,6 +254,16 @@ export class MapView {
 
     for (const c of cells) {
       const k = `${c.q},${c.r}`;
+      if (deploySet.has(k)) {
+        const empty = !battle.unitAt(c.q, c.r);
+        const placing = battle.pendingBuy && empty;
+        this.tintHex(
+          c,
+          size,
+          placing ? 'rgba(212,175,55,0.22)' : 'rgba(80,140,90,0.14)',
+          placing ? 'rgba(240,210,110,0.95)' : 'rgba(140,190,130,0.55)'
+        );
+      }
       if (moveSet.has(k)) this.tintHex(c, size, 'rgba(80,160,220,0.20)', 'rgba(150,210,255,0.78)');
       if (atkSet.has(k)) this.tintHex(c, size, 'rgba(180,40,30,0.24)', 'rgba(255,100,80,0.9)');
     }
@@ -264,7 +279,7 @@ export class MapView {
     for (const corpse of this.corpses) this.drawCorpse(corpse, size);
     for (const u of battle.units) {
       if (u.strength <= 0) continue;
-      if (u.hidden && u.faction !== 'rome') continue;
+      if (u.hidden && u.faction !== battle.playerFaction) continue;
       this.drawUnit(u, size, sel && sel.id === u.id);
     }
     this.drawFx(size);

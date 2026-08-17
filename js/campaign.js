@@ -1,5 +1,6 @@
 import { SCENARIOS, CAMPAIGN_ENDING } from './data/scenarios.js';
-import { UNIT_TYPES, SHOP_TYPES, makeUnit } from './data/units.js';
+import { UNIT_TYPES, SHOP_TYPES, GERMAN_SHOP_TYPES, makeUnit } from './data/units.js';
+import { skirmishTreasury, shopCatalogFor } from './actions.js';
 
 const SAVE_KEY = 'aquila-save-v2';
 const MAX_SLOTS = 14;
@@ -171,8 +172,20 @@ export function applyBattleResult(c, battle) {
     return { next: 'retry', ending: null };
   }
 
+  const hired = surviving.filter((s) => !c.core.some((old) => old.id === s.id));
+  for (const live of hired) {
+    nextCore.push({
+      id: live.id,
+      typeId: live.typeId,
+      name: live.name,
+      strength: live.strength,
+      maxStrength: live.maxStrength,
+      experience: live.experience,
+    });
+  }
   c.core = nextCore;
-  c.honors += battle.honorsEarned;
+  if (typeof battle.treasury === 'number') c.honors = battle.treasury + battle.honorsEarned;
+  else c.honors += battle.honorsEarned;
   if (battle.flags.eagle) c.eagle = true;
   c.extractedLast = battle.extracted.length;
   c.history.push({
@@ -209,8 +222,8 @@ export function applyBattleResult(c, battle) {
   return { next: 'shop', ending: null };
 }
 
-export function shopCatalog() {
-  return SHOP_TYPES.map((id) => UNIT_TYPES[id]);
+export function shopCatalog(faction = 'rome') {
+  return shopCatalogFor(faction);
 }
 
-export { MAX_SLOTS, UNIT_TYPES };
+export { MAX_SLOTS, UNIT_TYPES, GERMAN_SHOP_TYPES, skirmishTreasury };

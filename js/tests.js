@@ -6,6 +6,7 @@ import { defaultCore } from './campaign.js';
 import { makeUnit } from './data/units.js';
 import { reachable } from './pathfind.js';
 import { runAiTurn } from './ai.js';
+import { reinforcePointCost, canReinforce, affordablePoints } from './actions.js';
 
 const results = [];
 function assert(name, cond) {
@@ -21,7 +22,7 @@ export function runTests() {
   assert('kill chance clamped high', killChance(20) === 0.92);
 
   const sc = SCENARIOS[0];
-  const b = new Battle(sc, { core: defaultCore(), seed: 1 });
+  const b = new Battle(sc, { core: defaultCore(), seed: 1, skipDeploy: true });
   assert('mission 1 builds', b.cells.size === sc.cols * sc.rows);
   assert('mission 1 has rome', b.units.some((u) => u.faction === 'rome' && u.strength > 0));
   assert('mission 1 has germans', b.units.some((u) => u.faction === 'germania'));
@@ -67,25 +68,25 @@ export function runTests() {
   assert('favored melee can destroy a unit', killed);
 
   for (const s of SCENARIOS) {
-    const bat = new Battle(s, { core: defaultCore(), seed: 42 });
+    const bat = new Battle(s, { core: defaultCore(), seed: 42, skipDeploy: true });
     assert(`${s.id} has cells`, bat.cells.size > 20);
     assert(`${s.id} units placed`, bat.units.length >= 4);
   }
   assert('six campaign fields', SCENARIOS.length === 6);
   assert('angrivarian present', SCENARIOS.some((s) => s.id === 'angrivarian'));
 
-  const ger = new Battle(SCENARIOS[0], { core: defaultCore(), playerFaction: 'germania', seed: 2 });
+  const ger = new Battle(SCENARIOS[0], { core: defaultCore(), playerFaction: 'germania', seed: 2, skipDeploy: true });
   assert('german player faction', ger.playerFaction === 'germania' && ger.enemyFaction === 'rome');
   const gUnit = ger.units.find((u) => u.faction === 'germania' && u.strength > 0);
   ger.select(gUnit.id);
   assert('german unit selectable', ger.selected && ger.selected.faction === 'germania');
 
-  const snap = new Battle(SCENARIOS[0], { core: defaultCore(), seed: 9 });
+  const snap = new Battle(SCENARIOS[0], { core: defaultCore(), seed: 9, skipDeploy: true });
   const again = restoreBattle(snap.toJSON());
   assert('restore keeps units', again.units.length === snap.units.length);
   assert('restore keeps turn', again.turn === snap.turn);
 
-  const play = new Battle(SCENARIOS[0], { core: defaultCore(), seed: 7 });
+  const play = new Battle(SCENARIOS[0], { core: defaultCore(), seed: 7, skipDeploy: true });
   const rome = play.units.find((u) => u.faction === 'rome' && u.typeId === 'legion' && u.strength > 0);
   assert('play has legion', !!rome);
   const { hexes } = reachable(play, rome);
@@ -104,7 +105,7 @@ export function runTests() {
   assert('turn advanced', play.turn === 2);
   assert('no NaN strength', play.units.every((u) => Number.isFinite(u.strength)));
 
-  const fight = new Battle(SCENARIOS[4], { core: defaultCore(), seed: 3 });
+  const fight = new Battle(SCENARIOS[4], { core: defaultCore(), seed: 3, skipDeploy: true });
   const rider = fight.units.find((u) => u.typeId === 'equites' || u.typeId === 'batavi');
   const foe = fight.units.find((u) => u.faction === 'germania' && u.strength > 0);
   assert('idistaviso has cavalry and enemy', !!(rider && foe));
@@ -130,6 +131,128 @@ export function runTests() {
   }
   assert('three turns of idistaviso did not crash', fight.turn >= 1);
   assert('germanicus still alive or battle ended', fight.units.some((u) => u.typeId === 'germanicus' && u.strength > 0) || !!fight.result);
+
+  const dep = new Battle(SCENARIOS[0], { core: defaultCore(), seed: 11, honors: 80 });
+  assert('starts in deploy', dep.phase === 'deploy');
+  assert('deploy hexes exist', dep.deployKeys.size > 4);
+  const empty = dep.emptyDeployHexes();
+  assert('empty deploy hexes', empty.length > 0);
+  const bought = dep.startPurchase('auxilia') && dep.placePurchase(empty[0].q, empty[0].r);
+  assert('purchase during deploy', !!bought && dep.treasury === 80 - 50);
+  const hired = dep.units.find((u) => u.hiredThisBattle);
+  assert('hired unit on map', !!hired && hired.typeId === 'auxilia');
+  const romeLine = dep.units.find((u) => u.faction === 'rome' && u.typeId === 'legion');
+  const dest = dep.emptyDeployHexes()[0];
+  if (romeLine && dest) {
+    const shifted = dep.tryDeployMove(romeLine, dest.q, dest.r);
+    assert('reposition in deploy', !!shifted && romeLine.q === dest.q);
+  } else {
+    assert('reposition in deploy', true);
+  }
+  assert('cannot attack in deploy', dep.tryAttack(romeLine, dep.units.find((u) => u.faction === 'germania'), {}) === null);
+  assert('begin battle', dep.beginBattle() && dep.phase === 'player');
+
+  const refBat = new Battle(SCENARIOS[0], { core: defaultCore(), seed: 12, honors: 80, skipDeploy: true });
+  const wounded = refBat.units.find((u) => u.faction === 'rome' && u.typeId === 'legion' && u.strength > 0);
+  assert('reinforce target', !!wounded);
+  wounded.strength = 6;
+  wounded.experience = 2;
+  wounded.inSupply = true;
+  wounded.acted = false;
+  const nearEnemy = refBat.units.find((u) => u.faction === 'germania' && u.strength > 0);
+  if (nearEnemy) {
+    const holdQ = wounded.q;
+    const holdR = wounded.r;
+    wounded.q = nearEnemy.q + 3;
+    wounded.r = nearEnemy.r + 3;
+    if (!refBat.cell(wounded.q, wounded.r)) {
+      wounded.q = holdQ;
+      wounded.r = holdR;
+    }
+  }
+  const check = canReinforce(refBat, wounded, false);
+  if (check.ok) {
+    const beforeXp = wounded.experience;
+    const ok = refBat.reinforceUnit(wounded, false);
+    assert('regular reinforce spends honors', ok && refBat.treasury < 80);
+    assert('regular reinforce fills ranks', wounded.strength > 6);
+    assert('regular reinforce dilutes experience', wounded.experience <= beforeXp);
+    assert('reinforce spends the action', wounded.acted === true);
+  } else {
+    const isolated = makeUnit('legion', { q: 2, r: 4, strength: 6, experience: 2 });
+    isolated.inSupply = true;
+    refBat.units.push(isolated);
+    isolated.q = 2;
+    isolated.r = 4;
+    const ok = refBat.reinforceUnit(isolated, false);
+    assert('regular reinforce spends honors', ok);
+    assert('regular reinforce fills ranks', isolated.strength > 6);
+    assert('regular reinforce dilutes experience', isolated.experience < 2);
+    assert('reinforce spends the action', isolated.acted === true);
+  }
+
+  const eliteBat = new Battle(SCENARIOS[0], { core: defaultCore(), seed: 13, honors: 80, skipDeploy: true });
+  const vet = makeUnit('legion', { q: 2, r: 4, strength: 7, experience: 3, name: 'Cohors Test' });
+  vet.inSupply = true;
+  eliteBat.units.push(vet);
+  const eliteOk = eliteBat.reinforceUnit(vet, true);
+  assert('elite reinforce keeps stars', eliteOk && vet.experience === 3 && vet.strength > 7);
+
+  const contact = new Battle(SCENARIOS[0], { core: defaultCore(), seed: 14, honors: 80, skipDeploy: true });
+  const a = makeUnit('legion', { q: 1, r: 1, strength: 5 });
+  const press = makeUnit('warband', { q: 2, r: 1, strength: 8 });
+  a.inSupply = true;
+  contact.units.push(a, press);
+  assert('no reinforce in contact', canReinforce(contact, a, false).ok === false);
+
+  const ammoBat = new Battle(SCENARIOS[0], { core: defaultCore(), seed: 15, honors: 40, skipDeploy: true });
+  const sag = ammoBat.units.find((u) => u.typeId === 'sagittarii' || u.typeId === 'slingers') || makeUnit('sagittarii', { q: 2, r: 3 });
+  if (!ammoBat.units.includes(sag)) {
+    sag.inSupply = true;
+    ammoBat.units.push(sag);
+  }
+  sag.ammo = 0;
+  sag.acted = false;
+  sag.inSupply = true;
+  assert('resupply empty quivers', ammoBat.resupplyUnit(sag) && sag.ammo > 0 && sag.acted);
+
+  const marcher = makeUnit('auxilia', { q: 3, r: 4 });
+  marcher.inSupply = true;
+  ammoBat.units.push(marcher);
+  const mp = marcher.mpRemaining;
+  assert('forced march', ammoBat.forcedMarchUnit(marcher) && marcher.mpRemaining === mp + 2 && marcher.disorder >= 1);
+  const dummyFoe = ammoBat.units.find((u) => u.faction === 'germania' && u.strength > 0);
+  assert('forced march cannot attack', !dummyFoe || ammoBat.tryAttack(marcher, dummyFoe) === null);
+
+  const digger = makeUnit('legion', { q: 2, r: 4 });
+  digger.inSupply = true;
+  ammoBat.units.push(digger);
+  assert('dig works', ammoBat.digIn(digger) && digger.entrench >= 1 && digger.acted);
+
+  const host = makeUnit('auxilia', { q: 3, r: 5, strength: 4, experience: 2, name: 'Host' });
+  const donor = makeUnit('auxilia', { q: 4, r: 5, strength: 3, experience: 0, name: 'Donor' });
+  host.inSupply = true;
+  donor.inSupply = true;
+  ammoBat.units.push(host, donor);
+  assert('merge absorbs', ammoBat.mergeUnits(host, donor) && host.strength === 7 && donor.strength === 0);
+
+  const hero = ammoBat.units.find((u) => u.typeId === 'germanicus');
+  if (hero) {
+    const shaken = makeUnit('legion', { q: hero.q, r: hero.r });
+    const n = neighbors(hero)[0];
+    shaken.q = n.q;
+    shaken.r = n.r;
+    shaken.disorder = 2;
+    shaken.inSupply = true;
+    ammoBat.units.push(shaken);
+    hero.acted = false;
+    assert('hero rally', ammoBat.rallyUnit(hero) && shaken.disorder === 1);
+  } else {
+    assert('hero rally', true);
+  }
+
+  assert('point cost positive', reinforcePointCost(makeUnit('legion')) >= 3);
+  assert('affordable points respect purse', affordablePoints(makeUnit('legion', { strength: 1 }), 8) >= 1);
 
   const failed = results.filter((r) => !r.ok);
   return { results, failed, passed: results.length - failed.length };

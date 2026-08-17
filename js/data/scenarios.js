@@ -70,7 +70,7 @@ wwwwcccccccllldd
       { id: 'hero', type: 'survive', unit: 'germanicus', required: true, text: 'Germanicus must live' },
       { id: 'last', type: 'holdUntil', col: 2, row: 4, required: true, soft: true, text: 'Stand until dawn (turn 12)' },
     ],
-    hints: ['Fortified hexes hit back harder.', 'Missile troops shoot two hexes if they have ammunition.', 'End turn to let unmoved units entrench.'],
+    hints: ['Dress the line in deployment, then spend honors on a levy if the purse allows.', 'Replacements need supply and no enemy in contact. Veteran drafts keep the stars.', 'Fortified hexes hit back harder. End turn to let unmoved units entrench.'],
   },
 
   {

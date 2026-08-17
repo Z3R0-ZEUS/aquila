@@ -24,7 +24,7 @@ ES modules will not load from `file://`. Use the local server.
 ## Play
 
 - Left click: select / move / attack (a preview appears before you commit)
-- Right click: deselect
+- Right click: deselect or cancel a levy
 - Shift-drag or middle-mouse: pan
 - WASD / arrows: pan
 - Scroll: zoom
@@ -32,11 +32,40 @@ ES modules will not load from `file://`. Use the local server.
 - N or Tab: next idle unit
 - Space: hold / skip a unit
 - U: undo last move
-- Enter: end turn
+- R: replacements (reinforce)
+- V: veteran drafts (elite replacements)
+- I: draw ammunition
+- X: forced march
+- G: throw up works
+- Y: rally (commander)
+- C: scout (exploratores)
+- L: lie in wait (ambushers)
+- Enter: begin battle (deployment) or end turn
 
 Terrain, weather, supply, entrenchment, and flanking all show up in the combat preview. Romans suffer in deep woods and marsh; Germans suffer in the open.
 
-Core units persist between the five missions. Spend **Honors** in winter quarters on replacements and new cohorts.
+## Deployment
+
+After the briefing the army dresses on the green hexes. Reposition cohorts by selecting and clicking an empty deploy hex. Spend **Honors** in the Levy panel to raise a unit, then click an empty gold hex to place it. Campaign hires join the core if a slot remains; otherwise they fight this field only. Enter begins the day.
+
+## Orders
+
+Selected units show the actions they can take.
+
+- **Replacements** — Panzer Corps–style reinforce. In supply, not in contact with the enemy. Spend honors to refill strength. Regular drafts dilute experience.
+- **Veteran drafts** — twice the cost, keeps the stars.
+- **Draw ammunition** — missile troops refill from the wagons if in supply.
+- **Forced march** — +2 movement, +1 disorder. Cannot attack that day.
+- **Throw up works** — spend the turn to entrench now.
+- **Form testudo** — formed cohorts lock shields against shot.
+- **Absorb** — fold an adjacent cohort of the same type into this one.
+- **Rally** — a commander steadies shaken men beside him.
+- **Scout** — exploratores reveal hidden warbands.
+- **Lie in wait** — ambushers hide in timber.
+- **Repair / Fortify** — immunes rebuild a causeway or raise a marching camp.
+- **Torch** — burn a Chatti village.
+
+Core units persist between the six missions. Spend **Honors** in winter quarters — or during deployment — on replacements and new cohorts.
 
 ## Campaign
 

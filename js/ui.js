@@ -3,6 +3,18 @@ import { TERRAIN } from './data/terrain.js';
 import { hexDistance } from './hex.js';
 import { shopCatalog, slotsUsed, refillCost, MAX_SLOTS, DIFFICULTIES } from './campaign.js';
 import { SCENARIOS } from './data/scenarios.js';
+import {
+  shopCatalogFor,
+  canReinforce,
+  canResupply,
+  canForcedMarch,
+  canDig,
+  mergeDonors,
+  canRally,
+  canAmbush,
+  canScout,
+  canTestudo,
+} from './actions.js';
 
 export class UI {
   constructor(root, handlers) {
@@ -85,10 +97,15 @@ export class UI {
 
   renderBattle(battle) {
     this.show('screen-battle');
-    this.root.querySelector('#hud-turn').textContent = `Turn ${battle.turn} / ${battle.maxTurns}`;
+    this.root.querySelector('#hud-turn').textContent =
+      battle.phase === 'deploy' ? 'Deployment' : `Turn ${battle.turn} / ${battle.maxTurns}`;
     this.root.querySelector('#hud-weather').textContent = weatherLabel(battle.weather);
-    this.root.querySelector('#hud-phase').textContent = battle.phase === 'player' ? 'Your move' : 'Enemy move';
-    this.root.querySelector('#hud-phase').dataset.phase = battle.phase;
+    const honors = this.root.querySelector('#hud-honors');
+    if (honors) honors.textContent = battle.treasury ?? 0;
+    const phaseEl = this.root.querySelector('#hud-phase');
+    phaseEl.textContent =
+      battle.phase === 'deploy' ? 'Dress the line' : battle.phase === 'player' ? 'Your move' : 'Enemy move';
+    phaseEl.dataset.phase = battle.phase;
     const objs = this.root.querySelector('#hud-objs');
     objs.innerHTML = battle.objectives
       .map((o) => `<li class="${o.done ? 'done' : ''} ${o.required ? 'req' : ''}">${o.done ? '✓' : '○'} ${o.text}</li>`)
@@ -96,43 +113,80 @@ export class UI {
     const log = this.root.querySelector('#hud-log');
     log.innerHTML = battle.log.slice(0, 8).map((l) => `<div><span>T${l.turn}</span>${l.msg}</div>`).join('');
     this.renderPortrait(battle.selected, battle);
-    this.root.querySelector('#btn-end').disabled = battle.phase !== 'player' || !!battle.result;
+    this.renderDeploy(battle);
+    const end = this.root.querySelector('#btn-end');
+    end.disabled = (battle.phase !== 'player' && battle.phase !== 'deploy') || !!battle.result;
+    end.textContent = battle.phase === 'deploy' ? 'Begin battle' : 'End turn';
     const save = this.root.querySelector('#btn-save');
     if (save) save.disabled = battle.mode !== 'campaign' || !!battle.result;
     const undo = this.root.querySelector('#btn-undo');
     if (undo) undo.disabled = !battle.lastMove || battle.phase !== 'player';
+    const wait = this.root.querySelector('#btn-wait');
+    if (wait) wait.disabled = battle.phase !== 'player';
+  }
+
+  renderDeploy(battle) {
+    const panel = this.root.querySelector('#deploy-panel');
+    if (!panel) return;
+    const show = battle.phase === 'deploy';
+    panel.hidden = !show;
+    if (!show) return;
+    const hint = this.root.querySelector('#deploy-hint');
+    if (hint) {
+      hint.textContent = battle.pendingBuy
+        ? `Placing ${UNIT_TYPES[battle.pendingBuy].name}. Click an empty gold hex, or right-click to cancel.`
+        : 'Green hexes are your deployment. Raise a cohort, then click an empty hex. Select a unit and click another green hex to dress the line.';
+    }
+    const cat = this.root.querySelector('#deploy-cat');
+    cat.innerHTML = shopCatalogFor(battle.playerFaction)
+      .map((t) => {
+        const empty = battle.emptyDeployHexes().length;
+        const disabled = battle.treasury < t.cost || empty === 0;
+        const on = battle.pendingBuy === t.id ? 'on' : '';
+        return `<article class="${on}">
+          <img class="sart" src="assets/portraits/${t.portrait}" alt="" />
+          <div>
+            <h4>${t.name}</h4>
+            <p>melee ${t.meleeAtk}/${t.meleeDef} · mv ${t.move}</p>
+            <button data-buy="${t.id}" ${disabled ? 'disabled' : ''}>Raise ${t.cost}</button>
+          </div>
+        </article>`;
+      })
+      .join('');
+    cat.querySelectorAll('[data-buy]').forEach((b) => {
+      b.onclick = () => this.h.onDeployBuy(b.dataset.buy);
+    });
   }
 
   renderPortrait(unit, battle) {
     const card = this.root.querySelector('#portrait-card');
     if (!unit) {
       card.classList.add('empty');
-      card.innerHTML = `<div class="empty-hint">Select a cohort.<br>Blue hexes move · red hexes attack.<br>N next · Space hold · U undo · Enter end.</div>`;
+      card.innerHTML = `<div class="empty-hint">Select a cohort.<br>Blue hexes move · red hexes attack.<br>R replacements · V veteran drafts · I resupply.<br>N next · Space hold · U undo · Enter end.</div>`;
       return;
     }
     card.classList.remove('empty');
     const t = typeOf(unit);
     const terr = TERRAIN[battle.cell(unit.q, unit.r)?.terrain] || TERRAIN.clear;
     const stars = '★'.repeat(unit.experience) + '☆'.repeat(Math.max(0, 5 - unit.experience));
-    const actions = [];
-    if (t.traits.includes('engineer') && !unit.acted) {
-      actions.push(`<button data-act="engineer">Repair / Fortify</button>`);
-    }
-    if (t.traits.includes('formed') && !unit.acted && !unit.moved) {
-      actions.push(`<button data-act="testudo">${unit.testudo ? 'Break testudo' : 'Form testudo'}</button>`);
-    }
-    if (terr.burnable && !battle.cell(unit.q, unit.r).burned && unit.faction === 'rome' && !unit.acted) {
-      actions.push(`<button data-act="burn">Put village to the torch</button>`);
-    }
+    const actions = this.actionButtons(unit, battle);
+    const tags = [];
+    if (unit.core) tags.push('Core');
+    else if (unit.hiredThisBattle) tags.push('Levy');
+    else tags.push('Auxilia');
+    tags.push(t.class);
+    if (unit.testudo) tags.push('Testudo');
+    if (unit.forcedMarch) tags.push('Forced march');
+    if (unit.hidden) tags.push('Hidden');
     card.innerHTML = `
       <img class="pcard-art" src="assets/portraits/${t.portrait}" alt="" />
       <div class="pcard-body">
-        <div class="pcard-kicker">${unit.core ? 'Core' : 'Auxilia'} · ${t.class}</div>
+        <div class="pcard-kicker">${tags.join(' · ')}</div>
         <h3>${unit.name}</h3>
         <div class="stars">${stars}</div>
         <dl>
-          <div><dt>Strength</dt><dd>${effectiveStrength(unit)} / ${unit.strength}${unit.disorder ? ` <em>(${unit.disorder} disordered)</em>` : ''}</dd></div>
-          <div><dt>Move</dt><dd>${unit.mpRemaining} / ${t.move}</dd></div>
+          <div><dt>Strength</dt><dd>${effectiveStrength(unit)} / ${unit.strength}${unit.disorder ? ` <em>(${unit.disorder} disordered)</em>` : ''} <em>max ${unit.maxStrength}</em></dd></div>
+          <div><dt>Move</dt><dd>${unit.mpRemaining} / ${t.move}${unit.forcedMarch ? ' <em>+march</em>' : ''}</dd></div>
           <div><dt>Init / Melee</dt><dd>${t.initiative} · ${t.meleeAtk}/${t.meleeDef}</dd></div>
           <div><dt>Missile</dt><dd>${t.range ? `${t.missileAtk} rng ${t.range} · ammo ${unit.ammo}` : '—'}</dd></div>
           <div><dt>Ground</dt><dd>${terr.name}${unit.entrench ? ` · works ${unit.entrench}` : ''}${unit.inSupply ? '' : ' · OUT OF SUPPLY'}</dd></div>
@@ -140,8 +194,65 @@ export class UI {
         <div class="pcard-acts">${actions.join('')}</div>
       </div>`;
     card.querySelectorAll('button[data-act]').forEach((b) => {
-      b.addEventListener('click', () => this.h.onSpecial(b.dataset.act, unit));
+      b.addEventListener('click', () => {
+        const donor = b.dataset.donor ? battle.unitById(b.dataset.donor) : null;
+        this.h.onSpecial(b.dataset.act, unit, donor);
+      });
     });
+  }
+
+  actionButtons(unit, battle) {
+    const actions = [];
+    const t = typeOf(unit);
+    const terr = TERRAIN[battle.cell(unit.q, unit.r)?.terrain] || TERRAIN.clear;
+    const deploy = battle.phase === 'deploy';
+    const play = battle.phase === 'player';
+
+    const ref = canReinforce(battle, unit, false);
+    if (ref.ok) {
+      actions.push(`<button data-act="reinforce">Replacements ${ref.cost} · +${ref.points} (R)</button>`);
+    }
+    const elite = canReinforce(battle, unit, true);
+    if (elite.ok) {
+      actions.push(`<button data-act="elite">Veteran drafts ${elite.cost} · +${elite.points} (V)</button>`);
+    }
+    if (canResupply(battle, unit).ok) {
+      actions.push(`<button data-act="resupply">Draw ammunition (I)</button>`);
+    }
+    if (canForcedMarch(battle, unit).ok) {
+      actions.push(`<button data-act="march">Forced march +2 mp (X)</button>`);
+    }
+    if (canDig(battle, unit).ok) {
+      actions.push(`<button data-act="dig">Throw up works (G)</button>`);
+    }
+    if (canTestudo(battle, unit).ok) {
+      actions.push(`<button data-act="testudo">${unit.testudo ? 'Break testudo' : 'Form testudo'}</button>`);
+    }
+    if (t.traits.includes('engineer') && play && !unit.acted) {
+      actions.push(`<button data-act="engineer">Repair / Fortify</button>`);
+    }
+    if (terr.burnable && !battle.cell(unit.q, unit.r).burned && unit.faction === 'rome' && play && !unit.acted) {
+      actions.push(`<button data-act="burn">Put village to the torch</button>`);
+    }
+    if (canRally(battle, unit).ok) {
+      actions.push(`<button data-act="rally">Rally the line (Y)</button>`);
+    }
+    if (canScout(battle, unit).ok) {
+      actions.push(`<button data-act="scout">Scout the timber (C)</button>`);
+    }
+    if (canAmbush(battle, unit).ok) {
+      actions.push(`<button data-act="ambush">Lie in wait (L)</button>`);
+    }
+    for (const d of mergeDonors(battle, unit)) {
+      actions.push(`<button data-act="merge" data-donor="${d.id}">Absorb ${d.name}</button>`);
+    }
+    if (deploy && unit.hiredThisBattle) {
+      actions.push(`<button data-act="dismiss" class="ghost">Send back (+${t.cost})</button>`);
+    }
+    if (play && !unit.acted) {
+      actions.push(`<button data-act="wait" class="ghost">Hold (Space)</button>`);
+    }
+    return actions;
   }
 
   showPreview(prev, attacker, defender, missile, onConfirm, onCancel) {
@@ -200,9 +311,11 @@ export class UI {
     }
     const terr = TERRAIN[c.terrain];
     const u = battle.unitAt(hex.q, hex.r);
-    const hideUnit = u && u.hidden && u.faction !== 'rome';
+    const hideUnit = u && u.hidden && u.faction !== battle.playerFaction;
     el.classList.add('show');
+    const deploy = battle.phase === 'deploy' && battle.inDeploy(c.q, c.r);
     el.innerHTML = `<b>${terr.name}</b> · move ${terr.move} · def +${terr.meleeDef}
+      ${deploy ? '<div>Deployment hex.</div>' : ''}
       ${c.eagle ? '<div>The lost eagle is here.</div>' : ''}
       ${c.grave && !c.buried ? '<div>Unburied dead of Varus.</div>' : ''}
       ${!hideUnit && u ? `<div>${u.name} · ${effectiveStrength(u)} strength</div>` : ''}`;
