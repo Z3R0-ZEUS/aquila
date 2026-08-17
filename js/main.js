@@ -20,7 +20,7 @@ import { typeOf } from './data/units.js';
 import { canMelee, inMissileRange } from './combat.js';
 import { hexDistance } from './hex.js';
 import { reachable } from './pathfind.js';
-import { CAMPAIGN_INTRO, SCENARIOS } from './data/scenarios.js';
+import { CAMPAIGN_INTRO, CAMPAIGN_ENDING, SCENARIOS } from './data/scenarios.js';
 import { sfx, combatSound, toggleMute, isMuted, unlock } from './audio.js';
 
 const app = document.getElementById('app');
@@ -103,6 +103,9 @@ let battle = null;
 let aarFollow = 'shop';
 let keys = new Set();
 let setup = { kind: 'campaign', difficulty: 'seasoned', faction: 'rome', scenarioId: null };
+let introOpen = false;
+let introTimer = null;
+const INTRO_MS = 9000;
 
 const ui = new UI(app, {
   onSpecial(act, unit, extra) {
@@ -143,13 +146,54 @@ const ui = new UI(app, {
 });
 
 function syncMute() {
-  const btn = document.getElementById('btn-mute');
-  if (btn) btn.textContent = isMuted() ? 'Sound off' : 'Sound on';
+  const label = isMuted() ? 'Sound off' : 'Sound on';
+  const battleMute = document.getElementById('btn-mute');
+  const titleMute = document.getElementById('btn-mute-title');
+  if (battleMute) battleMute.textContent = label;
+  if (titleMute) titleMute.textContent = label;
+}
+
+function endingTextFor(c) {
+  const kinds = (c?.history || []).map((h) => h.kind).filter(Boolean);
+  if (kinds.length && kinds.every((k) => k === 'decisive')) return CAMPAIGN_ENDING.decisive;
+  if (kinds.length && kinds.every((k) => k === 'defeat')) return CAMPAIGN_ENDING.defeat;
+  return CAMPAIGN_ENDING.marginal;
 }
 
 function openTitle() {
   const c = loadCampaign();
   ui.renderTitle(!!c, !!(c && c.battleSave));
+}
+
+function finishIntro() {
+  if (!introOpen) return;
+  introOpen = false;
+  if (introTimer) {
+    clearTimeout(introTimer);
+    introTimer = null;
+  }
+  try {
+    sessionStorage.setItem('aquila-intro-seen', '1');
+  } catch {
+    /* private mode */
+  }
+  openTitle();
+}
+
+function playIntroThenTitle() {
+  let seen = false;
+  try {
+    seen = sessionStorage.getItem('aquila-intro-seen') === '1';
+  } catch {
+    seen = false;
+  }
+  if (seen) {
+    openTitle();
+    return;
+  }
+  introOpen = true;
+  ui.renderIntro(CAMPAIGN_INTRO);
+  introTimer = setTimeout(finishIntro, INTRO_MS);
 }
 
 function drawSetup() {
@@ -182,6 +226,13 @@ function confirmSetup() {
   }
   campaign = newCampaign(setup.difficulty);
   saveCampaign(campaign);
+  ui.renderPrologue(CAMPAIGN_INTRO);
+}
+
+function finishPrologue() {
+  unlock();
+  sfx.click();
+  if (!campaign) campaign = loadCampaign() || newCampaign(setup.difficulty);
   ui.renderBriefing(currentScenario(campaign), campaign);
 }
 
@@ -190,7 +241,7 @@ function continueCamp() {
   sfx.ui();
   campaign = loadCampaign() || newCampaign();
   if (campaign.mission >= SCENARIOS.length) {
-    ui.renderEnding(CAMPAIGN_INTRO.text);
+    ui.renderEnding(endingTextFor(campaign));
     return;
   }
   ui.renderShop(campaign);
@@ -493,6 +544,20 @@ canvas.addEventListener('wheel', (e) => {
 
 window.addEventListener('keydown', (e) => {
   keys.add(e.key.toLowerCase());
+  if (document.getElementById('screen-intro')?.classList.contains('show')) {
+    if (e.key === 'Enter' || e.key === 'Escape' || e.key === ' ') {
+      e.preventDefault();
+      finishIntro();
+    }
+    return;
+  }
+  if (document.getElementById('screen-prologue')?.classList.contains('show')) {
+    if (e.key === 'Enter' || e.key === 'Escape') {
+      e.preventDefault();
+      finishPrologue();
+    }
+    return;
+  }
   if (!document.getElementById('screen-battle').classList.contains('show')) return;
   if (e.key === 'Enter') endTurn();
   if (e.key === 'Escape') {
@@ -522,10 +587,15 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 
 document.addEventListener('pointerdown', () => unlock(), { once: true });
-document.getElementById('btn-mute').onclick = () => {
+function onMuteClick() {
   toggleMute();
   syncMute();
-};
+}
+document.getElementById('btn-mute').onclick = onMuteClick;
+const titleMute = document.getElementById('btn-mute-title');
+if (titleMute) titleMute.onclick = onMuteClick;
+document.getElementById('screen-intro').onclick = () => finishIntro();
+document.getElementById('btn-prologue-go').onclick = finishPrologue;
 document.getElementById('btn-new').onclick = startNew;
 document.getElementById('btn-continue').onclick = continueCamp;
 document.getElementById('btn-resume').onclick = resumeBattle;
@@ -582,19 +652,32 @@ function loop() {
   requestAnimationFrame(loop);
 }
 
-loadAssets().then(() => {
-  const params = new URLSearchParams(location.search);
-  const scene = params.get('scene');
-  if (scene === 'briefing' || scene === 'battle' || scene === 'shop') {
-    campaign = newCampaign();
-    const m = Number(params.get('mission') || 0);
-    if (Number.isFinite(m) && m >= 0 && m < SCENARIOS.length) campaign.mission = m;
-    if (scene === 'shop') ui.renderShop(campaign);
-    else if (scene === 'battle') deploy();
-    else ui.renderBriefing(currentScenario(campaign), campaign);
-  } else {
-    openTitle();
-  }
+const assetsReady = loadAssets();
+loop();
+
+function openDebugScene(scene) {
+  campaign = newCampaign();
+  const m = Number(new URLSearchParams(location.search).get('mission') || 0);
+  if (Number.isFinite(m) && m >= 0 && m < SCENARIOS.length) campaign.mission = m;
+  if (scene === 'shop') ui.renderShop(campaign);
+  else if (scene === 'battle') deploy();
+  else if (scene === 'prologue') ui.renderPrologue(CAMPAIGN_INTRO);
+  else if (scene === 'title') openTitle();
+  else if (scene === 'skirmish') ui.renderSkirmish();
+  else if (scene === 'ending') ui.renderEnding(CAMPAIGN_ENDING.decisive);
+  else if (scene === 'setup') drawSetup();
+  else ui.renderBriefing(currentScenario(campaign), campaign);
+}
+
+const bootParams = new URLSearchParams(location.search);
+const bootScene = bootParams.get('scene');
+const debugScenes = new Set(['briefing', 'battle', 'shop', 'prologue', 'title', 'skirmish', 'ending', 'setup']);
+if (debugScenes.has(bootScene)) {
+  assetsReady.then(() => {
+    openDebugScene(bootScene);
+    syncMute();
+  });
+} else {
+  playIntroThenTitle();
   syncMute();
-  loop();
-});
+}

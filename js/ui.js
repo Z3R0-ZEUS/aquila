@@ -27,6 +27,21 @@ export class UI {
     for (const el of this.root.querySelectorAll('.screen')) el.classList.toggle('show', el.id === id);
   }
 
+  renderIntro(intro) {
+    this.show('screen-intro');
+    const title = this.root.querySelector('#intro-title');
+    const text = this.root.querySelector('#intro-text');
+    if (title) title.textContent = intro.subtitle;
+    if (text) text.textContent = intro.text;
+  }
+
+  renderPrologue(intro) {
+    this.show('screen-prologue');
+    this.root.querySelector('#prologue-title').textContent = intro.title;
+    this.root.querySelector('#prologue-sub').textContent = intro.subtitle;
+    this.root.querySelector('#prologue-text').textContent = intro.text;
+  }
+
   renderTitle(hasSave, hasBattle) {
     this.show('screen-title');
     this.root.querySelector('#btn-continue').hidden = !hasSave;
@@ -65,6 +80,7 @@ export class UI {
     const list = this.root.querySelector('#skirmish-list');
     list.innerHTML = SCENARIOS.map(
       (s) => `<article>
+        <div class="skirmish-art" style="background-image:url(assets/briefings/${s.briefingArt})"></div>
         <h4>${s.title}</h4>
         <p>${s.year} · ${s.subtitle}</p>
         <div class="row-btns">
@@ -324,6 +340,11 @@ export class UI {
   renderAar(battle, follow) {
     this.show('screen-aar');
     const r = battle.result;
+    const art = this.root.querySelector('#aar-art');
+    if (art) {
+      const file = battle.scenario?.briefingArt || 'title.png';
+      art.style.backgroundImage = `url(assets/briefings/${file})`;
+    }
     this.root.querySelector('#aar-kind').textContent = r.title;
     this.root.querySelector('#aar-kind').dataset.kind = r.kind;
     this.root.querySelector('#aar-text').textContent = r.text;

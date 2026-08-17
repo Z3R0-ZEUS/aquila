@@ -4,27 +4,48 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Aquila — Germanicus and the Lost Eagles</title>
+  <link rel="icon" href="assets/ui/icon-32.png" type="image/png" sizes="32x32" />
+  <link rel="icon" href="assets/ui/icon-16.png" type="image/png" sizes="16x16" />
+  <link rel="icon" href="assets/ui/aquila.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="assets/ui/icon-256.png" />
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
   <div id="app">
-    <section id="screen-title" class="screen show">
+    <section id="screen-intro" class="screen">
+      <div class="intro-art"></div>
+      <div class="intro-vignette"></div>
+      <div class="intro-copy">
+        <div class="kicker" id="intro-kicker">Germania · 14 AD</div>
+        <h2 id="intro-title"></h2>
+        <p id="intro-text"></p>
+        <div class="intro-skip">Click or press Enter</div>
+      </div>
+    </section>
+
+    <section id="screen-title" class="screen">
+      <div class="title-art"></div>
+      <div class="title-vignette"></div>
+      <button class="ghost compact title-mute" id="btn-mute-title" type="button">Sound on</button>
       <div class="veil">
-        <div class="kicker">Germanicus · 14–16 AD</div>
-        <h1>AQUILA</h1>
-        <p class="sub">The eagles of Varus still sleep in German earth. Take the Rhine army into the timber and bring one home.</p>
-        <div class="actions">
-          <button class="gold" id="btn-new">New campaign</button>
-          <button class="ghost" id="btn-continue" hidden>Continue</button>
-          <button class="ghost" id="btn-resume" hidden>Resume battle</button>
-          <button class="ghost" id="btn-skirmish">Skirmish</button>
+        <div class="title-card plate">
+          <img class="emblem" src="assets/ui/emblem.png" alt="" />
+          <div class="kicker">Germanicus and the Lost Eagles</div>
+          <h1>AQUILA</h1>
+          <p class="sub">The eagles of Varus still sleep in German earth. Take the Rhine army into the timber and bring one home.</p>
+          <div class="actions">
+            <button class="gold" id="btn-new">New campaign</button>
+            <button class="ghost" id="btn-continue" hidden>Continue</button>
+            <button class="ghost" id="btn-resume" hidden>Resume battle</button>
+            <button class="ghost" id="btn-skirmish">Skirmish</button>
+          </div>
         </div>
       </div>
     </section>
 
     <section id="screen-setup" class="screen">
       <div class="frame">
-        <div class="frame-art" style="background-image:url(assets/briefings/title.png)"></div>
+        <div class="frame-art setup-art"></div>
         <div class="frame-copy">
           <div class="year">Orders of battle</div>
           <h2 id="setup-title">New campaign</h2>
@@ -39,7 +60,23 @@
       </div>
     </section>
 
+    <section id="screen-prologue" class="screen">
+      <div class="frame">
+        <div class="frame-art prologue-art"></div>
+        <div class="frame-copy">
+          <div class="year" id="prologue-year">Germania · 14 AD</div>
+          <h2 id="prologue-title">Aquila</h2>
+          <div class="cinzel" id="prologue-sub"></div>
+          <p class="lede" id="prologue-text"></p>
+          <div class="actions" style="margin-top:1rem">
+            <button class="gold" id="btn-prologue-go">March</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="screen-skirmish" class="screen">
+      <div class="menu-bg"></div>
       <div class="frame">
         <div class="frame-copy shop-copy" style="grid-column:1/-1">
           <div class="year">Skirmish</div>
@@ -77,7 +114,7 @@
     <section id="screen-battle" class="screen">
       <canvas id="map"></canvas>
       <div id="hud-top">
-        <div class="brand">AQUILA</div>
+        <div class="brand"><img src="assets/ui/emblem.png" alt="" />AQUILA</div>
         <div class="stat"><span id="hud-turn">Turn 1</span> · <span id="hud-weather">Fair</span> · Honors <b id="hud-honors">0</b> · <b id="hud-phase">Your move</b></div>
         <button class="ghost compact" id="btn-mute" type="button">Sound on</button>
       </div>
@@ -112,7 +149,7 @@
 
     <section id="screen-aar" class="screen">
       <div class="frame">
-        <div class="frame-art" style="background-image:url(assets/briefings/title.png)"></div>
+        <div id="aar-art" class="frame-art"></div>
         <div class="frame-copy">
           <div class="year">After-action</div>
           <h2 id="aar-kind">Victory</h2>
@@ -127,6 +164,7 @@
     </section>
 
     <section id="screen-shop" class="screen">
+      <div class="menu-bg"></div>
       <div class="frame">
         <div class="frame-copy shop-copy" style="grid-column:1/-1">
           <div class="year">Winter quarters</div>
@@ -155,11 +193,14 @@
     </section>
 
     <section id="screen-ending" class="screen">
+      <div class="ending-art"></div>
       <div class="veil">
-        <div class="kicker">Roma · 16 AD</div>
-        <h2>The eagles</h2>
-        <p id="ending-text"></p>
-        <button class="gold" id="btn-end-title">Return</button>
+        <div class="ending-card plate">
+          <div class="kicker">Roma · 16 AD</div>
+          <h2>The eagles</h2>
+          <p id="ending-text"></p>
+          <button class="gold" id="btn-end-title">Return</button>
+        </div>
       </div>
     </section>
   </div>
