@@ -84,8 +84,8 @@ export class UI {
         <h4>${s.title}</h4>
         <p>${s.year} · ${s.subtitle}</p>
         <div class="row-btns">
-          <button data-sk="${s.id}" data-fac="rome">As Rome</button>
-          <button data-sk="${s.id}" data-fac="germania">As the tribes</button>
+          <button class="gold compact" data-sk="${s.id}" data-fac="rome">As Rome</button>
+          <button class="ghost compact" data-sk="${s.id}" data-fac="germania">As the tribes</button>
         </div>
       </article>`
     ).join('');
@@ -113,8 +113,17 @@ export class UI {
 
   renderBattle(battle) {
     this.show('screen-battle');
-    this.root.querySelector('#hud-turn').textContent =
-      battle.phase === 'deploy' ? 'Deployment' : `Turn ${battle.turn} / ${battle.maxTurns}`;
+    const field = this.root.querySelector('#hud-field');
+    if (field) field.textContent = battle.scenario?.subtitle || battle.scenario?.title || '';
+    const turnLabel = this.root.querySelector('#hud-turn-label');
+    const turnEl = this.root.querySelector('#hud-turn');
+    if (battle.phase === 'deploy') {
+      if (turnLabel) turnLabel.textContent = 'Phase';
+      turnEl.textContent = 'Deploy';
+    } else {
+      if (turnLabel) turnLabel.textContent = 'Turn';
+      turnEl.textContent = `${battle.turn} / ${battle.maxTurns}`;
+    }
     this.root.querySelector('#hud-weather').textContent = weatherLabel(battle.weather);
     const honors = this.root.querySelector('#hud-honors');
     if (honors) honors.textContent = battle.treasury ?? 0;
@@ -164,7 +173,7 @@ export class UI {
           <div>
             <h4>${t.name}</h4>
             <p>melee ${t.meleeAtk}/${t.meleeDef} · mv ${t.move}</p>
-            <button data-buy="${t.id}" ${disabled ? 'disabled' : ''}>Raise ${t.cost}</button>
+            <button class="gold compact" data-buy="${t.id}" ${disabled ? 'disabled' : ''}>Raise ${t.cost}</button>
           </div>
         </article>`;
       })
@@ -176,9 +185,11 @@ export class UI {
 
   renderPortrait(unit, battle) {
     const card = this.root.querySelector('#portrait-card');
+    const actsEl = this.root.querySelector('#hud-unit-acts');
     if (!unit) {
       card.classList.add('empty');
-      card.innerHTML = `<div class="empty-hint">Select a cohort.<br>Blue hexes move · red hexes attack.<br>R replacements · V veteran drafts · I resupply.<br>N next · Space hold · U undo · Enter end.</div>`;
+      card.innerHTML = `<div class="empty-hint">Select a cohort. Blue hexes move · red hexes strike. N next · Space hold · U undo · Enter ends the day.</div>`;
+      if (actsEl) actsEl.innerHTML = '';
       return;
     }
     card.classList.remove('empty');
@@ -190,31 +201,36 @@ export class UI {
     if (unit.core) tags.push('Core');
     else if (unit.hiredThisBattle) tags.push('Levy');
     else tags.push('Auxilia');
-    tags.push(t.class);
+    tags.push(classLabel(t.class));
     if (unit.testudo) tags.push('Testudo');
     if (unit.forcedMarch) tags.push('Forced march');
     if (unit.hidden) tags.push('Hidden');
+    const str = effectiveStrength(unit);
+    const strPct = Math.max(0, Math.min(100, Math.round((str / unit.maxStrength) * 100)));
     card.innerHTML = `
       <img class="pcard-art" src="assets/portraits/${t.portrait}" alt="" />
       <div class="pcard-body">
-        <div class="pcard-kicker">${tags.join(' · ')}</div>
+        <div class="pcard-tags">${tags.map((x) => `<span>${x}</span>`).join('')}</div>
         <h3>${unit.name}</h3>
         <div class="stars">${stars}</div>
-        <dl>
-          <div><dt>Strength</dt><dd>${effectiveStrength(unit)} / ${unit.strength}${unit.disorder ? ` <em>(${unit.disorder} disordered)</em>` : ''} <em>max ${unit.maxStrength}</em></dd></div>
+        <div class="stat-grid">
+          <div class="wide"><dt>Strength</dt><dd>${str} / ${unit.maxStrength}${unit.disorder ? ` <em>(${unit.disorder} disordered)</em>` : ''}</dd></div>
+          <div class="str-bar" title="Strength"><i style="width:${strPct}%"></i></div>
           <div><dt>Move</dt><dd>${unit.mpRemaining} / ${t.move}${unit.forcedMarch ? ' <em>+march</em>' : ''}</dd></div>
-          <div><dt>Init / Melee</dt><dd>${t.initiative} · ${t.meleeAtk}/${t.meleeDef}</dd></div>
-          <div><dt>Missile</dt><dd>${t.range ? `${t.missileAtk} rng ${t.range} · ammo ${unit.ammo}` : '—'}</dd></div>
+          <div><dt>Melee</dt><dd>${t.meleeAtk} / ${t.meleeDef}</dd></div>
+          <div><dt>Missile</dt><dd>${t.range ? `${t.missileAtk} · rng ${t.range} · ammo ${unit.ammo}` : '—'}</dd></div>
           <div><dt>Ground</dt><dd>${terr.name}${unit.entrench ? ` · works ${unit.entrench}` : ''}${unit.inSupply ? '' : ' · OUT OF SUPPLY'}</dd></div>
-        </dl>
-        <div class="pcard-acts">${actions.join('')}</div>
+        </div>
       </div>`;
-    card.querySelectorAll('button[data-act]').forEach((b) => {
-      b.addEventListener('click', () => {
-        const donor = b.dataset.donor ? battle.unitById(b.dataset.donor) : null;
-        this.h.onSpecial(b.dataset.act, unit, donor);
+    if (actsEl) {
+      actsEl.innerHTML = actions.join('');
+      actsEl.querySelectorAll('button[data-act]').forEach((b) => {
+        b.addEventListener('click', () => {
+          const donor = b.dataset.donor ? battle.unitById(b.dataset.donor) : null;
+          this.h.onSpecial(b.dataset.act, unit, donor);
+        });
       });
-    });
+    }
   }
 
   actionButtons(unit, battle) {
@@ -226,47 +242,44 @@ export class UI {
 
     const ref = canReinforce(battle, unit, false);
     if (ref.ok) {
-      actions.push(`<button data-act="reinforce">Replacements ${ref.cost} · +${ref.points} (R)</button>`);
+      actions.push(`<button class="gold compact" data-act="reinforce">Replacements ${ref.cost} · +${ref.points} (R)</button>`);
     }
     const elite = canReinforce(battle, unit, true);
     if (elite.ok) {
-      actions.push(`<button data-act="elite">Veteran drafts ${elite.cost} · +${elite.points} (V)</button>`);
+      actions.push(`<button class="gold compact" data-act="elite">Veteran drafts ${elite.cost} · +${elite.points} (V)</button>`);
     }
     if (canResupply(battle, unit).ok) {
-      actions.push(`<button data-act="resupply">Draw ammunition (I)</button>`);
+      actions.push(`<button class="gold compact" data-act="resupply">Draw ammunition (I)</button>`);
     }
     if (canForcedMarch(battle, unit).ok) {
-      actions.push(`<button data-act="march">Forced march +2 mp (X)</button>`);
+      actions.push(`<button class="gold compact" data-act="march">Forced march +2 mp (X)</button>`);
     }
     if (canDig(battle, unit).ok) {
-      actions.push(`<button data-act="dig">Throw up works (G)</button>`);
+      actions.push(`<button class="gold compact" data-act="dig">Throw up works (G)</button>`);
     }
     if (canTestudo(battle, unit).ok) {
-      actions.push(`<button data-act="testudo">${unit.testudo ? 'Break testudo' : 'Form testudo'} (T)</button>`);
+      actions.push(`<button class="gold compact" data-act="testudo">${unit.testudo ? 'Break testudo' : 'Form testudo'} (T)</button>`);
     }
     if (t.traits.includes('engineer') && play && !unit.acted) {
-      actions.push(`<button data-act="engineer">Repair / Fortify</button>`);
+      actions.push(`<button class="gold compact" data-act="engineer">Repair / Fortify</button>`);
     }
     if (terr.burnable && !battle.cell(unit.q, unit.r).burned && unit.faction === 'rome' && play && !unit.acted) {
-      actions.push(`<button data-act="burn">Put village to the torch</button>`);
+      actions.push(`<button class="gold compact" data-act="burn">Put village to the torch</button>`);
     }
     if (canRally(battle, unit).ok) {
-      actions.push(`<button data-act="rally">Rally the line (Y)</button>`);
+      actions.push(`<button class="gold compact" data-act="rally">Rally the line (Y)</button>`);
     }
     if (canScout(battle, unit).ok) {
-      actions.push(`<button data-act="scout">Scout the timber (C)</button>`);
+      actions.push(`<button class="gold compact" data-act="scout">Scout the timber (C)</button>`);
     }
     if (canAmbush(battle, unit).ok) {
-      actions.push(`<button data-act="ambush">Lie in wait (L)</button>`);
+      actions.push(`<button class="gold compact" data-act="ambush">Lie in wait (L)</button>`);
     }
     for (const d of mergeDonors(battle, unit)) {
-      actions.push(`<button data-act="merge" data-donor="${d.id}">Absorb ${d.name}</button>`);
+      actions.push(`<button class="gold compact" data-act="merge" data-donor="${d.id}">Absorb ${d.name}</button>`);
     }
     if (deploy && unit.hiredThisBattle) {
-      actions.push(`<button data-act="dismiss" class="ghost">Send back (+${t.cost})</button>`);
-    }
-    if (play && !unit.acted) {
-      actions.push(`<button data-act="wait" class="ghost">Hold (Space)</button>`);
+      actions.push(`<button data-act="dismiss" class="ghost compact">Send back (+${t.cost})</button>`);
     }
     return actions;
   }
@@ -373,9 +386,9 @@ export class UI {
             <h4>${u.name}</h4>
             <p>${t.name} · ${u.strength}/${t.maxStrength} · ${'★'.repeat(u.experience)}</p>
             <div class="sacts">
-              <button data-refill="${u.id}" ${refill === 0 || campaign.honors < refill ? 'disabled' : ''}>Replacements ${refill || '—'}</button>
-              <button data-over="${u.id}" ${u.strength >= (t.overstrength || t.maxStrength) || campaign.honors < 15 ? 'disabled' : ''}>Overstrength 15</button>
-              <button data-dismiss="${u.id}" class="ghost">Dismiss</button>
+              <button class="gold compact" data-refill="${u.id}" ${refill === 0 || campaign.honors < refill ? 'disabled' : ''}>Replacements ${refill || '—'}</button>
+              <button class="gold compact" data-over="${u.id}" ${u.strength >= (t.overstrength || t.maxStrength) || campaign.honors < 15 ? 'disabled' : ''}>Overstrength 15</button>
+              <button data-dismiss="${u.id}" class="ghost compact">Dismiss</button>
             </div>
           </div>
         </article>`;
@@ -389,7 +402,7 @@ export class UI {
           <div>
             <h4>${t.name}</h4>
             <p>${t.slots} slot · melee ${t.meleeAtk}/${t.meleeDef}</p>
-            <button data-buy="${t.id}" ${campaign.honors < t.cost || slotsUsed(campaign) + t.slots > MAX_SLOTS ? 'disabled' : ''}>Hire ${t.cost}</button>
+            <button class="gold compact" data-buy="${t.id}" ${campaign.honors < t.cost || slotsUsed(campaign) + t.slots > MAX_SLOTS ? 'disabled' : ''}>Hire ${t.cost}</button>
           </div>
         </article>`
       )
@@ -416,4 +429,11 @@ function weatherLabel(w) {
   if (w === 'rain') return 'Rain';
   if (w === 'fog') return 'Fog';
   return 'Fair skies';
+}
+
+function classLabel(c) {
+  return String(c || '')
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, (ch) => ch.toUpperCase())
+    .trim();
 }

@@ -85,8 +85,8 @@ export class MapView {
       maxY = Math.max(maxY, p.y);
     }
     if (!isFinite(minX)) return;
-    const padX = 360;
-    const padY = 100;
+    const padX = 280;
+    const padY = 210;
     const bw = maxX - minX + SIZE0 * 2.4;
     const bh = maxY - minY + SIZE0 * 2.4;
     this.cam.scale = Math.max(0.55, Math.min(1.35, Math.min((this.w - padX) / bw, (this.h - padY) / bh)));
@@ -102,8 +102,8 @@ export class MapView {
       maxX = Math.max(maxX, p.x);
       maxY = Math.max(maxY, p.y);
     }
-    this.cam.x = this.w / 2 - (minX + maxX) / 2 + 50;
-    this.cam.y = this.h / 2 - (minY + maxY) / 2 + 8;
+    this.cam.x = this.w / 2 - (minX + maxX) / 2;
+    this.cam.y = this.h / 2 - (minY + maxY) / 2 - 28;
   }
 
   playMove(from, to) {

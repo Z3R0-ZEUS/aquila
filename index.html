@@ -31,7 +31,7 @@
         <div class="title-card plate">
           <img class="emblem" src="assets/ui/emblem.png" alt="" />
           <div class="kicker">Germanicus and the Lost Eagles</div>
-          <h1>AQUILA</h1>
+          <h1 class="mast">AQUILA</h1>
           <p class="sub">The eagles of Varus still sleep in German earth. Take the Rhine army into the timber and bring one home.</p>
           <div class="actions">
             <button class="gold" id="btn-new">New campaign</button>
@@ -45,14 +45,14 @@
 
     <section id="screen-setup" class="screen">
       <div class="frame">
-        <div class="frame-art setup-art"></div>
-        <div class="frame-copy">
+        <div class="frame-art setup-art framed-art"></div>
+        <div class="frame-copy plate">
           <div class="year">Orders of battle</div>
-          <h2 id="setup-title">New campaign</h2>
+          <h2 class="mast" id="setup-title">New campaign</h2>
           <p class="lede" id="setup-lede">Choose how hard the timber will be.</p>
           <div id="setup-diffs" class="choice-row"></div>
           <div id="setup-factions" class="choice-row" hidden></div>
-          <div class="actions" style="margin-top:1rem">
+          <div class="actions">
             <button class="gold" id="btn-setup-go">Begin</button>
             <button class="ghost" id="btn-setup-back">Title</button>
           </div>
@@ -62,13 +62,13 @@
 
     <section id="screen-prologue" class="screen">
       <div class="frame">
-        <div class="frame-art prologue-art"></div>
-        <div class="frame-copy">
+        <div class="frame-art prologue-art framed-art"></div>
+        <div class="frame-copy plate">
           <div class="year" id="prologue-year">Germania · 14 AD</div>
-          <h2 id="prologue-title">Aquila</h2>
+          <h2 class="mast" id="prologue-title">Aquila</h2>
           <div class="cinzel" id="prologue-sub"></div>
           <p class="lede" id="prologue-text"></p>
-          <div class="actions" style="margin-top:1rem">
+          <div class="actions">
             <button class="gold" id="btn-prologue-go">March</button>
           </div>
         </div>
@@ -77,13 +77,13 @@
 
     <section id="screen-skirmish" class="screen">
       <div class="menu-bg"></div>
-      <div class="frame">
-        <div class="frame-copy shop-copy" style="grid-column:1/-1">
+      <div class="frame frame-full">
+        <div class="frame-copy plate shop-copy">
           <div class="year">Skirmish</div>
-          <h2>Pick a field</h2>
+          <h2 class="mast">Pick a field</h2>
           <p class="lede">Fight any battle as Rome or as the tribes. Core army is not used — only the field and the eagles on it.</p>
           <div id="skirmish-list" class="skirmish-list"></div>
-          <div class="actions" style="margin-top:1rem">
+          <div class="actions">
             <button class="ghost" id="btn-skirmish-back">Title</button>
           </div>
         </div>
@@ -92,10 +92,10 @@
 
     <section id="screen-briefing" class="screen">
       <div class="frame">
-        <div id="briefing-art" class="frame-art"></div>
-        <div class="frame-copy">
+        <div id="briefing-art" class="frame-art framed-art"></div>
+        <div class="frame-copy plate">
           <div class="year" id="briefing-year"></div>
-          <h2 id="briefing-title"></h2>
+          <h2 class="mast" id="briefing-title"></h2>
           <div class="cinzel" id="briefing-sub"></div>
           <p class="lede" id="briefing-text"></p>
           <div class="meta-row"><span>Honors <b id="briefing-honors">0</b></span></div>
@@ -103,7 +103,7 @@
           <ul id="briefing-objs"></ul>
           <h3 class="cinzel">Counsel</h3>
           <ul id="briefing-hints"></ul>
-          <div class="actions" style="margin-top:1rem">
+          <div class="actions">
             <button class="gold" id="btn-deploy">Deploy</button>
             <button class="ghost" id="btn-brief-back">Camp</button>
           </div>
@@ -113,50 +113,73 @@
 
     <section id="screen-battle" class="screen">
       <canvas id="map"></canvas>
-      <div id="hud-top">
-        <div class="brand"><img src="assets/ui/emblem.png" alt="" />AQUILA</div>
-        <div class="stat"><span id="hud-turn">Turn 1</span> · <span id="hud-weather">Fair</span> · Honors <b id="hud-honors">0</b> · <b id="hud-phase">Your move</b></div>
-        <button class="ghost compact" id="btn-mute" type="button">Sound on</button>
-      </div>
-      <div id="hud-left">
-        <div class="panel">
+
+      <header id="hud-top" class="hud-chrome">
+        <div class="brand">
+          <img src="assets/ui/emblem.png" alt="" />
+          <div>
+            <div class="brand-name">AQUILA</div>
+            <div class="brand-field" id="hud-field"></div>
+          </div>
+        </div>
+        <div class="hud-stats">
+          <div class="chip"><span id="hud-turn-label">Turn</span><b id="hud-turn">1</b></div>
+          <div class="chip"><span>Sky</span><b id="hud-weather">Fair</b></div>
+          <div class="chip"><span>Honors</span><b id="hud-honors">0</b></div>
+          <div class="chip chip-phase" id="hud-phase" data-phase="player">Your move</div>
+        </div>
+        <div class="hud-tools">
+          <button class="ghost compact" id="btn-mute" type="button">Sound on</button>
+          <button class="ghost compact" id="btn-save" type="button">Save</button>
+        </div>
+      </header>
+
+      <aside id="hud-left">
+        <div class="panel" id="hud-orders">
           <h3>Orders</h3>
           <ul id="hud-objs"></ul>
         </div>
-        <div class="panel" id="portrait-card"></div>
-        <div class="hud-acts">
-          <button class="gold" id="btn-end">End turn</button>
-          <button class="ghost compact" id="btn-next-unit">Next (N)</button>
-          <button class="ghost compact" id="btn-wait">Hold (Space)</button>
-          <button class="ghost compact" id="btn-undo">Undo (U)</button>
-          <button class="ghost compact" id="btn-save">Save</button>
-        </div>
-      </div>
-      <div id="hud-right">
+      </aside>
+
+      <aside id="hud-right">
         <div class="panel" id="deploy-panel" hidden>
           <h3>Levy</h3>
           <p class="deploy-hint" id="deploy-hint">Gold hexes are your deployment. Spend honors to raise a cohort, then click an empty gold hex.</p>
           <div id="deploy-cat"></div>
         </div>
-        <div class="panel">
+        <div class="panel" id="hud-log-panel">
           <h3>Dispatches</h3>
           <div id="hud-log"></div>
         </div>
-      </div>
+      </aside>
+
+      <footer id="hud-bottom" class="hud-chrome">
+        <div id="portrait-card" class="empty"></div>
+        <div id="hud-unit-acts" class="pcard-acts"></div>
+        <div class="hud-end">
+          <div class="hud-acts">
+            <button class="ghost compact" id="btn-next-unit">Next (N)</button>
+            <button class="ghost compact" id="btn-wait">Hold (Space)</button>
+            <button class="ghost compact" id="btn-undo">Undo (U)</button>
+          </div>
+          <button class="gold" id="btn-end">End turn</button>
+        </div>
+      </footer>
+
       <div id="hextip"></div>
       <div id="combat-preview"></div>
     </section>
 
     <section id="screen-aar" class="screen">
       <div class="frame">
-        <div id="aar-art" class="frame-art"></div>
-        <div class="frame-copy">
+        <div id="aar-art" class="frame-art framed-art"></div>
+        <div class="frame-copy plate">
           <div class="year">After-action</div>
-          <h2 id="aar-kind">Victory</h2>
+          <h2 class="mast" id="aar-kind">Victory</h2>
           <p class="lede" id="aar-text"></p>
           <div class="meta-row"><span id="aar-honors"></span></div>
           <div id="aar-cas"></div>
-          <div class="actions" style="margin-top:1.4rem">
+          <div class="actions">
             <button class="gold" id="aar-next">Continue</button>
           </div>
         </div>
@@ -165,10 +188,10 @@
 
     <section id="screen-shop" class="screen">
       <div class="menu-bg"></div>
-      <div class="frame">
-        <div class="frame-copy shop-copy" style="grid-column:1/-1">
+      <div class="frame frame-full">
+        <div class="frame-copy plate shop-copy">
           <div class="year">Winter quarters</div>
-          <h2>The Rhine camp</h2>
+          <h2 class="mast">The Rhine camp</h2>
           <div class="meta-row">
             <span>Honors <b id="shop-honors">0</b></span>
             <span>Core slots <b id="shop-slots">0 / 12</b></span>
@@ -184,7 +207,7 @@
               <div id="shop-cat"></div>
             </div>
           </div>
-          <div class="actions" style="margin-top:1rem">
+          <div class="actions">
             <button class="gold" id="btn-next-mission">March</button>
             <button class="ghost" id="btn-shop-title">Title</button>
           </div>
@@ -197,7 +220,7 @@
       <div class="veil">
         <div class="ending-card plate">
           <div class="kicker">Roma · 16 AD</div>
-          <h2>The eagles</h2>
+          <h2 class="mast">The eagles</h2>
           <p id="ending-text"></p>
           <button class="gold" id="btn-end-title">Return</button>
         </div>
