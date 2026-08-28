@@ -1,6 +1,6 @@
 import { hexDistance, neighbors, hexLine } from './hex.js';
 import { TERRAIN } from './data/terrain.js';
-import { typeOf, effectiveStrength } from './data/units.js';
+import { typeOf, effectiveStrength, upgradeKindOf } from './data/units.js';
 
 export function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
@@ -125,6 +125,30 @@ export function combatContext(battle, attacker, defender, opts = {}) {
   if (charge) {
     atk += charge;
     mods.push({ label: 'Charge', val: charge });
+  }
+
+  if (attacker.upgrades?.arm) {
+    const kind = upgradeKindOf(at);
+    if (kind === 'missile' && isMissile) {
+      atk += 1;
+      mods.push({ label: 'Armed', val: 1 });
+    } else if (kind === 'charge' && !isMissile) {
+      atk += 1;
+      mods.push({ label: 'Armed', val: 1 });
+    }
+  }
+  if (defender.upgrades?.arm) {
+    const kind = upgradeKindOf(dt);
+    if (kind === 'armor' && !isMissile) {
+      def += 1;
+      mods.push({ label: 'Armed', val: 1, side: 'def' });
+    } else if (kind === 'ward' && isMissile) {
+      def += 1;
+      mods.push({ label: 'Armed', val: 1, side: 'def' });
+    } else if (kind === 'armor' && isMissile) {
+      def += 1;
+      mods.push({ label: 'Armed', val: 1, side: 'def' });
+    }
   }
 
   if (attacker.experience) {

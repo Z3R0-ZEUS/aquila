@@ -1,6 +1,7 @@
 import { hexToPixel, hexCorners, pixelToHex, hexDistance, DIRS, add } from './hex.js';
 import { TERRAIN } from './data/terrain.js';
 import { typeOf, effectiveStrength } from './data/units.js';
+import { archetypeOf, SpriteBank } from './sprites.js';
 import { reachable } from './pathfind.js';
 import { inMissileRange, canMelee } from './combat.js';
 import { artOf, visualHeight, FLOOR } from './terrainArt.js';
@@ -19,9 +20,12 @@ export class MapView {
     this.shake = 0;
     this.fx = [];
     this.anims = [];
+    this.clips = new Map();
     this.corpses = [];
     this.pulse = 0;
     this.time = 0;
+    this.lockUntil = 0;
+    this.bank = new SpriteBank(this.images, {});
     this._battle = null;
     this.resize();
     window.addEventListener('resize', () => this.resize());
@@ -119,7 +123,36 @@ export class MapView {
     this.burst(to.q, to.r, 6, 'dust');
   }
 
+  playClip(unit, clip, life) {
+    if (!unit) return;
+    const loop = clip === 'idle';
+    this.clips.set(unit.id, {
+      clip,
+      t: 0,
+      life: loop ? Infinity : (life ?? 0.48),
+      loop,
+      arch: archetypeOf(unit),
+      facing: unit.facing ?? 1,
+    });
+  }
+
+  clipOf(unit) {
+    const c = this.clips.get(unit.id);
+    if (!c) return { clip: 'idle', t: this.time + (unit.q || 0), loop: true, arch: archetypeOf(unit) };
+    if (!c.loop && c.t >= c.life) {
+      if (c.clip === 'die') return { ...c, t: c.life };
+      this.clips.delete(unit.id);
+      return { clip: 'idle', t: this.time + (unit.q || 0), loop: true, arch: archetypeOf(unit) };
+    }
+    return c;
+  }
+
+  locked() {
+    return performance.now() < this.lockUntil;
+  }
+
   playCombat(attacker, defender, result, missile) {
+    const life = missile ? 0.42 : 0.38;
     this.anims.push({
       kind: missile ? 'missile' : 'lunge',
       q0: attacker.q,
@@ -127,15 +160,26 @@ export class MapView {
       q1: defender.q,
       r1: defender.r,
       t: 0,
-      life: missile ? 0.38 : 0.32,
+      life,
+      typeId: attacker.typeId,
     });
+    this.playClip(attacker, 'attack', 0.48);
+    if (result?.defenderDead) this.playClip(defender, 'die', 0.7);
+    else this.playClip(defender, 'hit', 0.32);
     this.addFlash(defender.q, defender.r);
     this.burst(defender.q, defender.r, missile ? 10 : 16, missile ? 'spark' : 'clash');
+    if (!missile) this.addSlash(defender.q, defender.r);
     if (result?.aKills) this.addFloat(defender.q, defender.r, `−${result.aKills}`, '#ffd4a0');
     if (result?.dKills) this.addFloat(attacker.q, attacker.r, `−${result.dKills}`, '#ff8a70');
     if (result?.defenderDead) this.addDeath(defender);
     if (result?.attackerDead) this.addDeath(attacker);
     this.shake = missile ? 5 : 10;
+    this.lockUntil = performance.now() + (missile ? 420 : 400);
+  }
+
+  addSlash(q, r) {
+    const p = hexToPixel(q, r, this.size());
+    this.fx.push({ kind: 'slash', x: p.x, y: p.y, t: 0, life: 0.28 });
   }
 
   addDeath(unit) {
@@ -143,9 +187,12 @@ export class MapView {
       q: unit.q,
       r: unit.r,
       faction: unit.faction,
+      typeId: unit.typeId,
+      arch: archetypeOf(unit),
+      facing: unit.facing ?? 1,
       portrait: typeOf(unit).portrait,
       t: 0,
-      life: 0.85,
+      life: 6.5,
     });
     this.burst(unit.q, unit.r, 22, 'death');
     this.addFloat(unit.q, unit.r, 'DESTROYED', '#ffb070');
@@ -304,6 +351,7 @@ export class MapView {
       a.t += dt;
       return a.t < a.life;
     });
+    for (const c of this.clips.values()) c.t += dt;
     this.corpses = this.corpses.filter((c) => {
       c.t += dt;
       return c.t < c.life;
@@ -681,31 +729,59 @@ export class MapView {
       const p1 = hexToPixel(a.q1, a.r1, size);
       const x = p0.x + (p1.x - p0.x) * k;
       const y = p0.y + (p1.y - p0.y) * k - Math.sin(k * Math.PI) * size * 0.55;
+      const ang = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+      const type = a.typeId || '';
+      const img = type === 'slingers' ? this.images['fx-stone']
+        : type === 'scorpio' ? (this.images['fx-bolt'] || this.images['fx-pilum'])
+        : type === 'sagittarii' || type === 'hunters' ? this.images['fx-arrow']
+        : this.images['fx-pilum'] || this.images['fx-arrow'];
       ctx.save();
       ctx.translate(x, y);
-      ctx.rotate(Math.atan2(p1.y - p0.y, p1.x - p0.x));
-      ctx.fillStyle = '#e8d2a0';
-      ctx.fillRect(-size * 0.18, -1.2, size * 0.36, 2.4);
-      ctx.fillStyle = '#8a3030';
-      ctx.beginPath();
-      ctx.moveTo(size * 0.18, 0);
-      ctx.lineTo(size * 0.08, -3);
-      ctx.lineTo(size * 0.08, 3);
-      ctx.fill();
+      ctx.rotate(ang);
+      if (img && img.complete && img.naturalWidth) {
+        const w = size * (type === 'scorpio' ? 0.7 : 0.55);
+        const h = w * (img.naturalHeight / img.naturalWidth);
+        ctx.drawImage(img, -w / 2, -h / 2, w, h);
+      } else {
+        ctx.fillStyle = '#e8d2a0';
+        ctx.fillRect(-size * 0.18, -1.2, size * 0.36, 2.4);
+        ctx.fillStyle = '#8a3030';
+        ctx.beginPath();
+        ctx.moveTo(size * 0.18, 0);
+        ctx.lineTo(size * 0.08, -3);
+        ctx.lineTo(size * 0.08, 3);
+        ctx.fill();
+      }
       ctx.restore();
     }
+  }
+
+  drawSpriteFrame(img, cx, cy, size, facing, heightMul = 1.95) {
+    const ctx = this.ctx;
+    if (!img || !img.complete || !img.naturalWidth) return false;
+    const h = size * heightMul;
+    const w = h * (img.naturalWidth / img.naturalHeight);
+    ctx.save();
+    ctx.translate(cx, cy);
+    if ((facing ?? 1) < 0) ctx.scale(-1, 1);
+    ctx.drawImage(img, -w / 2, -h * 0.88, w, h);
+    ctx.restore();
+    return true;
   }
 
   drawCorpse(c, size) {
     const ctx = this.ctx;
     const p = hexToPixel(c.q, c.r, size);
-    const k = 1 - c.t / c.life;
+    const fade = c.t < 0.4 ? 1 : Math.max(0.18, 1 - (c.t - 0.4) / (c.life - 0.4));
     ctx.save();
-    ctx.globalAlpha = k * 0.7;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, size * 0.42, 0, Math.PI * 2);
-    ctx.fillStyle = c.faction === 'rome' ? '#5a1818' : '#2a3a18';
-    ctx.fill();
+    ctx.globalAlpha = fade * 0.85;
+    const die = this.bank.frame(c.arch, 'die', 1);
+    if (!this.drawSpriteFrame(die, p.x, p.y, size, c.facing, 1.7)) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, size * 0.42, 0, Math.PI * 2);
+      ctx.fillStyle = c.faction === 'rome' ? '#5a1818' : '#2a3a18';
+      ctx.fill();
+    }
     ctx.restore();
   }
 
@@ -717,68 +793,80 @@ export class MapView {
     const lift = cell ? visualHeight(cell.terrain) * size : 0;
     const p = { x: base.x, y: base.y - lift };
     const t = typeOf(u);
-    const r = size * 0.44;
-    const bob = selected ? Math.sin(this.pulse * 4) * 1.3 : Math.sin(this.time * 2 + u.q) * 0.4;
+    const clip = this.clipOf(u);
+    const bob = selected ? Math.sin(this.pulse * 4) * 1.2 : Math.sin(this.time * 2 + u.q) * 0.35;
     const cx = p.x;
     const cy = p.y + bob;
+    const facing = u.facing ?? clip.facing ?? 1;
+    const r = size * 0.44;
 
     ctx.beginPath();
-    ctx.ellipse(cx, cy + r * 0.92, r * 0.78, r * 0.24, 0, 0, TAU);
-    ctx.fillStyle = 'rgba(0,0,0,0.42)';
+    ctx.ellipse(cx, cy + size * 0.18, size * 0.42, size * 0.14, 0, 0, TAU);
+    ctx.fillStyle = 'rgba(0,0,0,0.40)';
     ctx.fill();
 
     ctx.beginPath();
-    ctx.ellipse(cx, cy + r * 0.62, r * 0.70, r * 0.22, 0, 0, TAU);
-    ctx.fillStyle = '#2a2116';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(cx, cy + r * 0.52, r * 0.66, r * 0.18, 0, 0, TAU);
-    ctx.fillStyle = '#5a4630';
-    ctx.fill();
-
-    const img = this.images[t.portrait] || this.images[`portrait-${t.id}`];
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, TAU);
-    ctx.closePath();
-    ctx.clip();
-    if (img && img.complete && img.naturalWidth) {
-      ctx.drawImage(img, cx - r, cy - r * 1.05, r * 2, r * 2.15);
-    } else {
-      ctx.fillStyle = t.color;
-      ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
-      ctx.fillStyle = '#fff';
-      ctx.font = `700 ${Math.floor(size * 0.3)}px Cinzel, serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(t.short, cx, cy);
-    }
-    ctx.restore();
-
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, TAU);
-    ctx.lineWidth = selected ? 3.4 : 2.2;
-    ctx.strokeStyle = selected ? '#f0d78c' : u.faction === 'rome' ? '#c43c2c' : '#6a8a3a';
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(cx, cy, r - 1.4, 0, TAU);
-    ctx.strokeStyle = 'rgba(40,28,14,0.55)';
-    ctx.lineWidth = 1.4;
+    ctx.ellipse(cx, cy + size * 0.16, size * 0.34, size * 0.10, 0, 0, TAU);
+    ctx.strokeStyle = selected ? '#f0d78c' : u.faction === 'rome' ? 'rgba(196,60,44,0.85)' : 'rgba(106,138,58,0.85)';
+    ctx.lineWidth = selected ? 2.4 : 1.6;
     ctx.stroke();
 
     if (selected) {
       ctx.beginPath();
-      ctx.arc(cx, cy, r + 4 + Math.sin(this.pulse * 5), 0, TAU);
-      ctx.strokeStyle = 'rgba(240,215,140,0.45)';
-      ctx.lineWidth = 1.4;
+      ctx.moveTo(cx, cy + size * 0.38);
+      ctx.lineTo(cx - 5, cy + size * 0.52);
+      ctx.lineTo(cx + 5, cy + size * 0.52);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(240,215,140,0.9)';
+      ctx.fill();
+    }
+
+    const spr = this.bank.frame(clip.arch || archetypeOf(u), clip.clip, clip.t);
+    const drew = this.drawSpriteFrame(spr, cx, cy, size, facing, t.class === 'cavalry' || t.class === 'artillery' ? 2.15 : 1.95);
+
+    if (!drew) {
+      const img = this.images[t.portrait] || this.images[`portrait-${t.id}`];
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy - r * 0.15, r, 0, TAU);
+      ctx.closePath();
+      ctx.clip();
+      if (img && img.complete && img.naturalWidth) {
+        ctx.drawImage(img, cx - r, cy - r * 1.2, r * 2, r * 2.15);
+      } else {
+        ctx.fillStyle = t.color;
+        ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+        ctx.fillStyle = '#fff';
+        ctx.font = `700 ${Math.floor(size * 0.3)}px Cinzel, serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(t.short, cx, cy);
+      }
+      ctx.restore();
+      ctx.beginPath();
+      ctx.arc(cx, cy - r * 0.15, r, 0, TAU);
+      ctx.lineWidth = selected ? 3.2 : 2;
+      ctx.strokeStyle = selected ? '#f0d78c' : u.faction === 'rome' ? '#c43c2c' : '#6a8a3a';
       ctx.stroke();
+    }
+
+    if (u.testudo) {
+      ctx.save();
+      ctx.globalAlpha = 0.55;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy - size * 0.15, size * 0.38, size * 0.22, 0, 0, TAU);
+      ctx.fillStyle = '#6a2a22';
+      ctx.fill();
+      ctx.strokeStyle = '#d4af37';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.restore();
     }
 
     if (!u.inSupply) {
       ctx.beginPath();
-      ctx.arc(cx, cy, r + 3, 0, TAU);
-      ctx.strokeStyle = 'rgba(220,80,40,0.7)';
+      ctx.ellipse(cx, cy + size * 0.16, size * 0.40, size * 0.13, 0, 0, TAU);
+      ctx.strokeStyle = 'rgba(220,80,40,0.75)';
       ctx.setLineDash([3, 3]);
       ctx.stroke();
       ctx.setLineDash([]);
@@ -788,8 +876,8 @@ export class MapView {
     ctx.font = `700 ${Math.max(10, Math.floor(size * 0.28))}px "Source Serif 4", serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const bx = cx + r * 0.58;
-    const by = cy + r * 0.55;
+    const bx = cx + size * 0.38;
+    const by = cy + size * 0.12;
     ctx.beginPath();
     ctx.arc(bx, by, size * 0.2, 0, TAU);
     ctx.fillStyle = 'rgba(10,8,4,0.86)';
@@ -803,12 +891,17 @@ export class MapView {
     if (u.entrench > 0) {
       ctx.fillStyle = '#c4b08a';
       ctx.font = '700 10px serif';
-      ctx.fillText('▴'.repeat(Math.min(3, u.entrench)), cx, cy - r - 4);
+      ctx.fillText('▴'.repeat(Math.min(3, u.entrench)), cx, cy - size * 1.05);
     }
     if (u.experience > 0) {
       ctx.fillStyle = '#e8c56b';
       ctx.font = '900 9px serif';
-      ctx.fillText('★'.repeat(Math.min(5, u.experience)), cx, cy + r + 8);
+      ctx.fillText('★'.repeat(Math.min(5, u.experience)), cx, cy + size * 0.42);
+    }
+    if (u.upgrades?.arm) {
+      ctx.fillStyle = '#c4a56a';
+      ctx.font = '700 9px Cinzel, serif';
+      ctx.fillText('†', cx - size * 0.34, cy + size * 0.12);
     }
   }
 
@@ -826,6 +919,24 @@ export class MapView {
         ctx.arc(p.x, p.y, size * (0.35 + (1 - k) * 0.9), 0, TAU);
         ctx.fillStyle = `rgba(255,210,130,${0.38 * k})`;
         ctx.fill();
+      } else if (f.kind === 'slash') {
+        const clash = this.images['fx-clash'];
+        ctx.save();
+        ctx.globalAlpha = k;
+        ctx.translate(f.x, f.y);
+        ctx.rotate(-0.5 + (1 - k) * 0.4);
+        if (clash && clash.complete && clash.naturalWidth) {
+          const s = size * (0.9 + (1 - k) * 0.5);
+          ctx.drawImage(clash, -s / 2, -s / 2, s, s);
+        } else {
+          ctx.strokeStyle = `rgba(255,220,160,${k})`;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(-size * 0.35, size * 0.2);
+          ctx.lineTo(size * 0.4, -size * 0.25);
+          ctx.stroke();
+        }
+        ctx.restore();
       } else if (f.kind === 'part') {
         f.x += f.vx * 0.016;
         f.y += f.vy * 0.016;

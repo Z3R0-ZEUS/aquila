@@ -22,6 +22,7 @@ export const UNIT_TYPES = {
     slots: 2,
     traits: ['entrenchPlus', 'formed'],
     portrait: 'legion.png',
+    sprite: 'rome-heavy',
     color: '#8b1e1e',
   },
   veteran: {
@@ -45,6 +46,7 @@ export const UNIT_TYPES = {
     slots: 2,
     traits: ['entrenchPlus', 'formed', 'overrunDisordered'],
     portrait: 'veteran.png',
+    sprite: 'rome-heavy-vet',
     color: '#6b1212',
   },
   auxilia: {
@@ -68,6 +70,7 @@ export const UNIT_TYPES = {
     slots: 1,
     traits: ['forestFighter'],
     portrait: 'auxilia.png',
+    sprite: 'rome-aux',
     color: '#b84828',
   },
   sagittarii: {
@@ -91,6 +94,7 @@ export const UNIT_TYPES = {
     slots: 1,
     traits: ['missile'],
     portrait: 'sagittarii.png',
+    sprite: 'rome-bow',
     color: '#c4a35a',
   },
   slingers: {
@@ -114,6 +118,7 @@ export const UNIT_TYPES = {
     slots: 1,
     traits: ['missile'],
     portrait: 'slingers.png',
+    sprite: 'rome-sling',
     color: '#c9b07a',
   },
   equites: {
@@ -137,6 +142,7 @@ export const UNIT_TYPES = {
     slots: 2,
     traits: ['cavalry', 'overrun'],
     portrait: 'equites.png',
+    sprite: 'rome-horse',
     color: '#2c4a6e',
   },
   batavi: {
@@ -160,6 +166,7 @@ export const UNIT_TYPES = {
     slots: 2,
     traits: ['cavalry', 'overrun', 'riverine'],
     portrait: 'batavi.png',
+    sprite: 'rome-batavi',
     color: '#1e3a5f',
   },
   exploratores: {
@@ -183,6 +190,7 @@ export const UNIT_TYPES = {
     slots: 1,
     traits: ['recon', 'ignoreZoc', 'skirmish'],
     portrait: 'exploratores.png',
+    sprite: 'rome-scout',
     color: '#4a6741',
   },
   scorpio: {
@@ -206,6 +214,7 @@ export const UNIT_TYPES = {
     slots: 1,
     traits: ['missile', 'entrenchBreaker', 'noMeleeReturn'],
     portrait: 'scorpio.png',
+    sprite: 'rome-scorpio',
     color: '#5a4030',
   },
   engineers: {
@@ -229,6 +238,7 @@ export const UNIT_TYPES = {
     slots: 1,
     traits: ['engineer'],
     portrait: 'engineers.png',
+    sprite: 'rome-engineer',
     color: '#6a6050',
   },
   germanicus: {
@@ -252,6 +262,7 @@ export const UNIT_TYPES = {
     slots: 0,
     traits: ['hero', 'auraRome', 'formed'],
     portrait: 'germanicus.png',
+    sprite: 'rome-hero-ger',
     color: '#d4af37',
     unique: true,
   },
@@ -276,6 +287,7 @@ export const UNIT_TYPES = {
     slots: 0,
     traits: ['hero', 'auraRome'],
     portrait: 'caecina.png',
+    sprite: 'rome-hero-cae',
     color: '#c4a050',
     unique: true,
   },
@@ -301,6 +313,7 @@ export const UNIT_TYPES = {
     slots: 1,
     traits: ['forestFighter', 'forestCharge'],
     portrait: 'warband.png',
+    sprite: 'ger-warband',
     color: '#4a5a32',
   },
   nobles: {
@@ -324,6 +337,7 @@ export const UNIT_TYPES = {
     slots: 2,
     traits: ['forestFighter', 'forestCharge'],
     portrait: 'nobles.png',
+    sprite: 'ger-noble',
     color: '#3a4a28',
   },
   skirmishers: {
@@ -347,6 +361,7 @@ export const UNIT_TYPES = {
     slots: 1,
     traits: ['missile', 'skirmish', 'forestFighter'],
     portrait: 'skirmishers.png',
+    sprite: 'ger-skirmish',
     color: '#6a7a48',
   },
   hunters: {
@@ -370,6 +385,7 @@ export const UNIT_TYPES = {
     slots: 1,
     traits: ['missile', 'forestFighter', 'forestAccuracy'],
     portrait: 'hunters.png',
+    sprite: 'ger-hunter',
     color: '#5a6a38',
   },
   lightHorse: {
@@ -393,6 +409,7 @@ export const UNIT_TYPES = {
     slots: 1,
     traits: ['cavalry', 'overrun'],
     portrait: 'lighthorse.png',
+    sprite: 'ger-horse',
     color: '#5a4830',
   },
   ambushers: {
@@ -416,6 +433,7 @@ export const UNIT_TYPES = {
     slots: 1,
     traits: ['forestFighter', 'ambush', 'hiddenStart'],
     portrait: 'ambushers.png',
+    sprite: 'ger-ambush',
     color: '#2a3a22',
   },
   raiders: {
@@ -439,6 +457,7 @@ export const UNIT_TYPES = {
     slots: 1,
     traits: ['forestFighter', 'fogFighter'],
     portrait: 'raiders.png',
+    sprite: 'ger-raider',
     color: '#3a3228',
   },
   arminius: {
@@ -462,6 +481,7 @@ export const UNIT_TYPES = {
     slots: 0,
     traits: ['hero', 'auraGermania', 'forestFighter', 'ambush'],
     portrait: 'arminius.png',
+    sprite: 'ger-hero',
     color: '#c9a227',
     unique: true,
   },
@@ -521,7 +541,8 @@ export function makeUnit(typeId, extras = {}) {
     hidden: extras.hidden ?? t.traits.includes('hiddenStart'),
     chargedThisTurn: extras.chargedThisTurn ?? false,
     core: extras.core ?? false,
-    facing: extras.facing ?? 0,
+    facing: extras.facing ?? 1,
+    upgrades: extras.upgrades ? { ...extras.upgrades } : {},
     testudo: extras.testudo ?? false,
     forcedMarch: extras.forcedMarch ?? false,
     hiredThisBattle: extras.hiredThisBattle ?? false,
@@ -536,4 +557,13 @@ export function effectiveStrength(unit) {
 
 export function isHero(unit) {
   return typeOf(unit).traits.includes('hero');
+}
+
+export function upgradeKindOf(typeOrUnit) {
+  const t = typeOrUnit?.traits ? typeOrUnit : typeOf(typeOrUnit);
+  if (!t) return 'armor';
+  if (t.traits.includes('cavalry')) return 'charge';
+  if (t.traits.includes('missile')) return 'missile';
+  if (t.traits.includes('engineer')) return 'ward';
+  return 'armor';
 }

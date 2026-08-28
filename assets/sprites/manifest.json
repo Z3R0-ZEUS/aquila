@@ -1,0 +1,172 @@
+{
+  "ger-ambush": {
+    "idle": {
+      "count": 1,
+      "fps": 10,
+      "loop": true
+    }
+  },
+  "ger-hero": {
+    "idle": {
+      "count": 1,
+      "fps": 10,
+      "loop": true
+    }
+  },
+  "ger-horse": {
+    "idle": {
+      "count": 1,
+      "fps": 10,
+      "loop": true
+    }
+  },
+  "ger-hunter": {
+    "idle": {
+      "count": 1,
+      "fps": 10,
+      "loop": true
+    }
+  },
+  "ger-noble": {
+    "idle": {
+      "count": 1,
+      "fps": 10,
+      "loop": true
+    }
+  },
+  "ger-raider": {
+    "idle": {
+      "count": 1,
+      "fps": 10,
+      "loop": true
+    }
+  },
+  "ger-skirmish": {
+    "idle": {
+      "count": 1,
+      "fps": 10,
+      "loop": true
+    }
+  },
+  "ger-warband": {
+    "die": {
+      "count": 1,
+      "fps": 12,
+      "loop": false
+    },
+    "hit": {
+      "count": 1,
+      "fps": 12,
+      "loop": false
+    },
+    "idle": {
+      "count": 8,
+      "fps": 10,
+      "loop": true
+    },
+    "attack": {
+      "count": 10,
+      "fps": 12,
+      "loop": false
+    }
+  },
+  "rome-aux": {
+    "idle": {
+      "count": 1,
+      "fps": 10,
+      "loop": true
+    }
+  },
+  "rome-batavi": {
+    "idle": {
+      "count": 1,
+      "fps": 10,
+      "loop": true
+    }
+  },
+  "rome-bow": {
+    "idle": {
+      "count": 1,
+      "fps": 10,
+      "loop": true
+    }
+  },
+  "rome-engineer": {
+    "idle": {
+      "count": 1,
+      "fps": 10,
+      "loop": true
+    }
+  },
+  "rome-heavy": {
+    "die": {
+      "count": 1,
+      "fps": 12,
+      "loop": false
+    },
+    "hit": {
+      "count": 1,
+      "fps": 12,
+      "loop": false
+    },
+    "idle": {
+      "count": 8,
+      "fps": 10,
+      "loop": true
+    },
+    "attack": {
+      "count": 10,
+      "fps": 12,
+      "loop": false
+    }
+  },
+  "rome-heavy-vet": {
+    "idle": {
+      "count": 1,
+      "fps": 10,
+      "loop": true
+    }
+  },
+  "rome-hero-cae": {
+    "idle": {
+      "count": 1,
+      "fps": 10,
+      "loop": true
+    }
+  },
+  "rome-hero-ger": {
+    "idle": {
+      "count": 1,
+      "fps": 10,
+      "loop": true
+    }
+  },
+  "rome-horse": {
+    "idle": {
+      "count": 1,
+      "fps": 10,
+      "loop": true
+    }
+  },
+  "rome-scorpio": {
+    "idle": {
+      "count": 1,
+      "fps": 10,
+      "loop": true
+    }
+  },
+  "rome-scout": {
+    "idle": {
+      "count": 1,
+      "fps": 10,
+      "loop": true
+    }
+  },
+  "rome-sling": {
+    "idle": {
+      "count": 1,
+      "fps": 10,
+      "loop": true
+    }
+  }
+}

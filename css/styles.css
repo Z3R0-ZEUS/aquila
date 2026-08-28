@@ -705,6 +705,168 @@ button:disabled {
 .cp-mods { list-style: none; font-size: 0.8rem; color: var(--muted); columns: 2; margin: 0.25rem 0 0.7rem; }
 .cp-acts { display: flex; gap: 0.6rem; justify-content: center; }
 
+/* Campaign theater */
+#screen-campaign {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) min(380px, 38vw);
+  background: #0a0806;
+}
+#screen-campaign.show { display: grid; }
+#campaign-stage {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  background: #0a0806;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#campaign-map {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+}
+#campaign-art {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+}
+#campaign-spine {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+#campaign-spine .spine-all {
+  stroke: rgba(40, 32, 20, 0.55);
+  stroke-width: 0.9;
+  stroke-dasharray: 1.2 1.1;
+}
+#campaign-spine .spine-done {
+  stroke: #d4af37;
+  stroke-width: 1.15;
+}
+#campaign-nodes { position: absolute; inset: 0; }
+.camp-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 0;
+  width: auto;
+  cursor: default;
+}
+.camp-node.current { cursor: pointer; }
+.camp-pin {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #c4a56a;
+  background: #3a2a16;
+  box-shadow: 0 0 0 3px rgba(8, 6, 4, 0.45);
+}
+.camp-node.done .camp-pin { background: #6a4a1a; border-color: #e8c56b; }
+.camp-node.current .camp-pin {
+  background: #d4af37;
+  border-color: #f0d78c;
+  box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.28), 0 0 16px rgba(212, 175, 55, 0.55);
+  animation: campulse 1.8s ease-in-out infinite;
+}
+.camp-node.locked .camp-pin { opacity: 0.4; }
+.camp-node.lost .camp-pin { background: #6a1818; }
+@keyframes campulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.16); }
+}
+.camp-label {
+  background: rgba(8, 6, 4, 0.72);
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  padding: 0.12rem 0.4rem 0.18rem;
+  text-align: center;
+  pointer-events: none;
+}
+.camp-label b {
+  display: block;
+  color: var(--gold-2);
+  font-family: Cinzel, serif;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+}
+.camp-label small { color: var(--muted); font-size: 0.62rem; }
+.camp-node.locked .camp-label { opacity: 0.45; }
+#campaign-dock {
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.7rem 0.85rem 0.8rem;
+  overflow: auto;
+  min-height: 0;
+  border-width: 22px;
+}
+.camp-mast { font-size: 1.15rem; padding: 0.55rem 1.2rem; }
+.camp-next { color: var(--gold-2); font-size: 0.88rem; }
+#camp-roster, #camp-cat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 28vh;
+  overflow: auto;
+}
+.camp-card {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 0.4rem;
+  text-align: left;
+  padding: 0.28rem;
+  border: 1px solid rgba(212, 175, 55, 0.22);
+  background: rgba(8, 6, 4, 0.42);
+  color: inherit;
+  min-width: 0;
+  width: 100%;
+}
+.camp-card.on { border-color: var(--gold); background: rgba(120, 40, 28, 0.32); }
+.camp-card .sart { width: 44px; height: 58px; }
+.camp-card h4 { font-size: 0.78rem; color: var(--gold-2); }
+.camp-card p { color: var(--muted); font-size: 0.68rem; }
+#camp-detail {
+  background: rgba(8, 6, 4, 0.35);
+  border: 1px solid rgba(212, 175, 55, 0.22);
+  padding: 0.45rem;
+}
+#camp-detail h4 { color: var(--gold-2); font-size: 0.9rem; }
+#camp-detail p { color: var(--muted); font-size: 0.78rem; margin-bottom: 0.35rem; }
+.camp-detail-art {
+  float: right;
+  width: 64px;
+  height: 86px;
+  object-fit: cover;
+  object-position: top center;
+  border: 1px solid var(--line);
+  margin: 0 0 0.3rem 0.4rem;
+}
+#camp-cat article {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 0.4rem;
+  padding: 0.28rem;
+  border: 1px solid rgba(212, 175, 55, 0.18);
+}
+@media (max-width: 900px) {
+  #screen-campaign.show {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(32vh, 42vh) minmax(0, 1fr);
+  }
+}
+
 /* Shop */
 .shop-copy {
   height: 100%;

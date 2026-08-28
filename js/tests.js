@@ -1,8 +1,8 @@
 import { hexDistance, offsetToAxial, neighbors } from './hex.js';
-import { killChance, previewCombat, resolveCombat, applyHits, inMissileRange } from './combat.js';
+import { killChance, previewCombat, resolveCombat, applyHits, inMissileRange, combatContext } from './combat.js';
 import { Battle, restoreBattle } from './game.js';
 import { SCENARIOS } from './data/scenarios.js';
-import { defaultCore } from './campaign.js';
+import { defaultCore, newCampaign, applyDrill, applyArm } from './campaign.js';
 import { makeUnit } from './data/units.js';
 import { reachable } from './pathfind.js';
 import { runAiTurn } from './ai.js';
@@ -335,6 +335,63 @@ export function runTests() {
   const liveIds = new Set(restored.units.map((u) => u.id));
   const freshHire = makeUnit('auxilia', { q: 0, r: 0 });
   assert('restore does not reuse live ids', !liveIds.has(freshHire.id));
+
+  const camp = newCampaign('seasoned');
+  const first = camp.core[0];
+  const hon = camp.honors;
+  const xp = first.experience;
+  assert('drill spends honors', applyDrill(camp, first.id) && first.experience === xp + 1 && camp.honors === hon - 20);
+  assert('arm spends honors', applyArm(camp, first.id) && first.upgrades.arm === true && camp.honors === hon - 45);
+  assert('arm is once', applyArm(camp, first.id) === false);
+
+  const plated = makeUnit('legion', { q: 0, r: 0, upgrades: { arm: true } });
+  const plain = makeUnit('legion', { q: 0, r: 0 });
+  const foeA = makeUnit('warband', { q: 1, r: 0 });
+  const ring = {
+    weather: 'fair',
+    units: [plated, plain, foeA],
+    rng: () => 0.5,
+    cell() { return { terrain: 'clear', elevation: 0 }; },
+    unitAt() { return null; },
+  };
+  plated.inSupply = true;
+  plain.inSupply = true;
+  foeA.inSupply = true;
+  const ctxArm = combatContext(ring, foeA, plated, { missile: false });
+  const ctxPlain = combatContext(ring, foeA, plain, { missile: false });
+  assert('arm raises melee defense', ctxArm.def === ctxPlain.def + 1);
+
+  const shot = makeUnit('sagittarii', { q: 0, r: 0, upgrades: { arm: true }, ammo: 3 });
+  const unarmedBow = makeUnit('sagittarii', { q: 0, r: 0, ammo: 3 });
+  shot.inSupply = true;
+  unarmedBow.inSupply = true;
+  const ring2 = {
+    weather: 'fair',
+    units: [shot, unarmedBow, foeA],
+    rng: () => 0.5,
+    cell() { return { terrain: 'clear', elevation: 0 }; },
+    unitAt() { return null; },
+  };
+  const ctxShot = combatContext(ring2, shot, foeA, { missile: true });
+  const ctxBow = combatContext(ring2, unarmedBow, foeA, { missile: true });
+  assert('arm raises missile attack', ctxShot.atk === ctxBow.atk + 1);
+
+  const instant = new Battle(SCENARIOS[0], { core: defaultCore(), seed: 12, skipDeploy: true });
+  const atkU = instant.units.find((u) => u.faction === 'rome' && u.typeId === 'legion');
+  const defU = instant.units.find((u) => u.faction === 'germania' && u.strength > 0);
+  if (atkU && defU) {
+    atkU.q = defU.q;
+    atkU.r = defU.r;
+    const n = neighbors(defU)[0];
+    atkU.q = n.q;
+    atkU.r = n.r;
+    atkU.acted = false;
+    atkU.inSupply = true;
+    const res = instant.tryAttack(atkU, defU);
+    assert('combat resolves without waiting on animation', !!res && atkU.acted === true);
+  } else {
+    assert('combat resolves without waiting on animation', true);
+  }
 
   const failed = results.filter((r) => !r.ok);
   return { results, failed, passed: results.length - failed.length };

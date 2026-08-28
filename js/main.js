@@ -10,6 +10,8 @@ import {
   applyBattleResult,
   applyRefill,
   applyOverstrength,
+  applyDrill,
+  applyArm,
   buyUnit,
   dismissUnit,
   saveBattle,
@@ -17,6 +19,7 @@ import {
   DIFFICULTIES,
 } from './campaign.js';
 import { typeOf } from './data/units.js';
+import { fetchManifest, spriteJobs, FX_LIST, SpriteBank } from './sprites.js';
 import { canMelee, inMissileRange } from './combat.js';
 import { hexDistance } from './hex.js';
 import { reachable } from './pathfind.js';
@@ -94,7 +97,16 @@ async function loadAssets() {
       })
     );
   }
+  const manifest = await fetchManifest();
+  for (const [key, src] of spriteJobs(manifest)) {
+    jobs.push(loadImage(src).then((img) => { if (img) images[key] = img; }));
+  }
+  for (const [key, src] of FX_LIST) {
+    jobs.push(loadImage(src).then((img) => { if (img) images[key] = img; }));
+  }
   await Promise.all(jobs);
+  view.bank = new SpriteBank(images, manifest);
+  view.images = images;
 }
 
 const view = new MapView(canvas, images);
@@ -127,10 +139,12 @@ const ui = new UI(app, {
     if (!campaign) return;
     if (kind === 'refill') applyRefill(campaign, id);
     if (kind === 'over') applyOverstrength(campaign, id);
+    if (kind === 'drill') applyDrill(campaign, id);
+    if (kind === 'arm') applyArm(campaign, id);
     if (kind === 'buy') buyUnit(campaign, id);
     if (kind === 'dismiss') dismissUnit(campaign, id);
     saveCampaign(campaign);
-    ui.renderShop(campaign);
+    ui.renderCampaign(campaign);
   },
   onSetup(kind, value) {
     if (kind === 'difficulty') setup.difficulty = value;
@@ -142,6 +156,12 @@ const ui = new UI(app, {
     setup.scenarioId = id;
     setup.faction = fac;
     startSkirmish();
+  },
+  onMarch() {
+    if (!campaign) return;
+    unlock();
+    sfx.click();
+    ui.renderBriefing(currentScenario(campaign), campaign);
   },
 });
 
@@ -237,7 +257,7 @@ function finishPrologue() {
   unlock();
   sfx.click();
   if (!campaign) campaign = loadCampaign() || newCampaign(setup.difficulty);
-  ui.renderBriefing(currentScenario(campaign), campaign);
+  ui.renderCampaign(campaign);
 }
 
 function continueCamp() {
@@ -248,7 +268,7 @@ function continueCamp() {
     ui.renderEnding(endingTextFor(campaign));
     return;
   }
-  ui.renderShop(campaign);
+  ui.renderCampaign(campaign);
 }
 
 function resumeBattle() {
@@ -358,6 +378,8 @@ async function endTurn() {
     if (a.type === 'attack' && a.result) {
       combatSound(!!a.missile, a.result);
       view.playCombat(a.unit, a.target, a.result, !!a.missile);
+      ui.renderBattle(battle);
+      await wait(a.missile ? 380 : 360);
     }
   }
   ui.renderBattle(battle);
@@ -378,6 +400,7 @@ function wait(ms) {
 
 function onMapClick(sx, sy, button) {
   if (!battle || !battle.playerCanOrder() || battle.result) return;
+  if (button !== 2 && view.locked() && battle.phase === 'player') return;
   ui.hidePreview();
   if (button === 2) {
     battle.selectedId = null;
@@ -622,7 +645,7 @@ document.getElementById('btn-brief-back').onclick = () => {
     openTitle();
     return;
   }
-  ui.renderShop(campaign);
+  ui.renderCampaign(campaign);
 };
 document.getElementById('btn-next-unit').onclick = cycleUnit;
 document.getElementById('btn-wait').onclick = holdUnit;
@@ -642,10 +665,19 @@ document.getElementById('aar-next').onclick = () => {
     if (battle && battle.mode === 'skirmish') startSkirmish();
     else ui.renderBriefing(currentScenario(campaign), campaign);
   } else if (aarFollow === 'ending') ui.renderEnding(ui._endingText || '');
-  else ui.renderShop(campaign);
+  else ui.renderCampaign(campaign);
 };
 document.getElementById('btn-next-mission').onclick = () => ui.renderBriefing(currentScenario(campaign), campaign);
 document.getElementById('btn-shop-title').onclick = openTitle;
+const campMarch = document.getElementById('btn-camp-march');
+if (campMarch) campMarch.onclick = () => {
+  if (!campaign) return;
+  unlock();
+  sfx.click();
+  ui.renderBriefing(currentScenario(campaign), campaign);
+};
+const campTitle = document.getElementById('btn-camp-title');
+if (campTitle) campTitle.onclick = openTitle;
 document.getElementById('btn-end-title').onclick = openTitle;
 
 function loop() {
@@ -667,7 +699,7 @@ function openDebugScene(scene) {
   campaign = newCampaign();
   const m = Number(new URLSearchParams(location.search).get('mission') || 0);
   if (Number.isFinite(m) && m >= 0 && m < SCENARIOS.length) campaign.mission = m;
-  if (scene === 'shop') ui.renderShop(campaign);
+  if (scene === 'shop' || scene === 'campaign') ui.renderCampaign(campaign);
   else if (scene === 'battle') deploy();
   else if (scene === 'prologue') ui.renderPrologue(CAMPAIGN_INTRO);
   else if (scene === 'title') openTitle();
@@ -679,7 +711,7 @@ function openDebugScene(scene) {
 
 const bootParams = new URLSearchParams(location.search);
 const bootScene = bootParams.get('scene');
-const debugScenes = new Set(['briefing', 'battle', 'shop', 'prologue', 'title', 'skirmish', 'ending', 'setup']);
+const debugScenes = new Set(['briefing', 'battle', 'shop', 'campaign', 'prologue', 'title', 'skirmish', 'ending', 'setup']);
 if (debugScenes.has(bootScene)) {
   assetsReady.then(() => {
     openDebugScene(bootScene);

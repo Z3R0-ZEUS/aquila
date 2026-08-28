@@ -2,7 +2,8 @@ import { SCENARIOS, CAMPAIGN_ENDING } from './data/scenarios.js';
 import { UNIT_TYPES, SHOP_TYPES, GERMAN_SHOP_TYPES, makeUnit } from './data/units.js';
 import { skirmishTreasury, shopCatalogFor } from './actions.js';
 
-const SAVE_KEY = 'aquila-save-v2';
+const SAVE_KEY = 'aquila-save-v3';
+const SAVE_KEYS_OLD = ['aquila-save-v2', 'aquila-save-v1'];
 const MAX_SLOTS = 14;
 
 export const DIFFICULTIES = {
@@ -29,6 +30,7 @@ export function defaultCore() {
     strength: UNIT_TYPES[u.typeId].maxStrength,
     maxStrength: UNIT_TYPES[u.typeId].overstrength || UNIT_TYPES[u.typeId].maxStrength,
     experience: u.experience,
+    upgrades: {},
   }));
 }
 
@@ -53,11 +55,22 @@ export function saveCampaign(c) {
 
 export function loadCampaign() {
   try {
-    const raw = localStorage.getItem(SAVE_KEY) || localStorage.getItem('aquila-save-v1');
+    let raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) {
+      for (const k of SAVE_KEYS_OLD) {
+        raw = localStorage.getItem(k);
+        if (raw) break;
+      }
+    }
     if (!raw) return null;
     const c = JSON.parse(raw);
     if (!c.difficulty) c.difficulty = 'seasoned';
     if (!('battleSave' in c)) c.battleSave = null;
+    if (Array.isArray(c.core)) {
+      for (const u of c.core) {
+        if (!u.upgrades) u.upgrades = {};
+      }
+    }
     return c;
   } catch {
     return null;
@@ -130,7 +143,27 @@ export function buyUnit(c, typeId) {
     strength: t.maxStrength,
     maxStrength: t.overstrength || t.maxStrength,
     experience: 0,
+    upgrades: {},
   });
+  return true;
+}
+
+export function applyDrill(c, unitId) {
+  const u = c.core.find((x) => x.id === unitId);
+  if (!u) return false;
+  if ((u.experience || 0) >= 5 || c.honors < 20) return false;
+  c.honors -= 20;
+  u.experience = (u.experience || 0) + 1;
+  return true;
+}
+
+export function applyArm(c, unitId) {
+  const u = c.core.find((x) => x.id === unitId);
+  if (!u) return false;
+  if (!u.upgrades) u.upgrades = {};
+  if (u.upgrades.arm || c.honors < 25) return false;
+  c.honors -= 25;
+  u.upgrades.arm = true;
   return true;
 }
 
@@ -155,6 +188,7 @@ export function applyBattleResult(c, battle) {
         strength: live.strength,
         experience: live.experience,
         maxStrength: live.maxStrength,
+        upgrades: live.upgrades ? { ...live.upgrades } : (old.upgrades || {}),
       });
     }
   }
@@ -181,6 +215,7 @@ export function applyBattleResult(c, battle) {
       strength: live.strength,
       maxStrength: live.maxStrength,
       experience: live.experience,
+      upgrades: live.upgrades ? { ...live.upgrades } : {},
     });
   }
   c.core = nextCore;
@@ -207,6 +242,7 @@ export function applyBattleResult(c, battle) {
       strength: 10,
       maxStrength: 12,
       experience: 2,
+      upgrades: {},
     };
     if (slotsUsed({ core: [...c.core, vet] }) <= MAX_SLOTS) c.core.push(vet);
   }

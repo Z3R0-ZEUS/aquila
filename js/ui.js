@@ -3,6 +3,8 @@ import { TERRAIN } from './data/terrain.js';
 import { hexDistance } from './hex.js';
 import { shopCatalog, slotsUsed, refillCost, MAX_SLOTS, DIFFICULTIES } from './campaign.js';
 import { SCENARIOS } from './data/scenarios.js';
+import { CAMPAIGN_NODES, nodeState, historyFor, DRILL_COST, DRILL_CAP, ARM_COST } from './data/campaignMap.js';
+import { upgradeKindOf } from './data/units.js';
 import {
   shopCatalogFor,
   canReinforce,
@@ -369,48 +371,127 @@ export class UI {
     btn.textContent = follow === 'retry' ? 'Try the field again' : follow === 'ending' ? 'The recall' : 'Return to camp';
   }
 
-  renderShop(campaign) {
-    this.show('screen-shop');
-    this.root.querySelector('#shop-honors').textContent = campaign.honors;
-    this.root.querySelector('#shop-slots').textContent = `${slotsUsed(campaign)} / ${MAX_SLOTS}`;
+  renderCampaign(campaign) {
+    this.show('screen-campaign');
+    const honors = this.root.querySelector('#camp-honors');
+    const slots = this.root.querySelector('#camp-slots');
+    const nextEl = this.root.querySelector('#camp-next');
+    if (honors) honors.textContent = campaign.honors;
+    if (slots) slots.textContent = `${slotsUsed(campaign)} / ${MAX_SLOTS}`;
     const next = SCENARIOS[campaign.mission];
-    this.root.querySelector('#shop-next').textContent = next ? `Next: ${next.title}` : 'Campaign complete';
-    const roster = this.root.querySelector('#shop-roster');
-    roster.innerHTML = campaign.core
-      .map((u) => {
-        const t = UNIT_TYPES[u.typeId];
-        const refill = refillCost(u);
-        return `<article data-id="${u.id}">
-          <img class="sart" src="assets/portraits/${t.portrait}" alt="" />
-          <div>
-            <h4>${u.name}</h4>
-            <p>${t.name} · ${u.strength}/${t.maxStrength} · ${'★'.repeat(u.experience)}</p>
-            <div class="sacts">
-              <button class="gold compact" data-refill="${u.id}" ${refill === 0 || campaign.honors < refill ? 'disabled' : ''}>Replacements ${refill || '—'}</button>
-              <button class="gold compact" data-over="${u.id}" ${u.strength >= (t.overstrength || t.maxStrength) || campaign.honors < 15 ? 'disabled' : ''}>Overstrength 15</button>
-              <button data-dismiss="${u.id}" class="ghost compact">Dismiss</button>
+    if (nextEl) nextEl.textContent = next ? `${next.year} · ${next.title}` : 'Campaign complete';
+
+    const nodes = this.root.querySelector('#campaign-nodes');
+    const spine = this.root.querySelector('#campaign-spine');
+    if (nodes) {
+      nodes.innerHTML = CAMPAIGN_NODES.map((n, i) => {
+        const st = nodeState(campaign, n, i);
+        const hist = historyFor(campaign, n.scenarioId);
+        const mark = hist ? (hist.kind === 'decisive' ? 'eagle' : hist.kind === 'defeat' ? 'lost' : 'won') : '';
+        return `<button type="button" class="camp-node ${st} ${mark}" style="left:${n.x}%;top:${n.y}%" data-node="${n.id}" data-state="${st}" title="${n.subtitle}">
+          <span class="camp-pin"></span>
+          <span class="camp-label"><b>${n.subtitle}</b><small>${n.year}</small></span>
+        </button>`;
+      }).join('');
+      nodes.querySelectorAll('[data-node]').forEach((b) => {
+        b.onclick = () => {
+          if (b.dataset.state === 'current' && this.h.onMarch) this.h.onMarch();
+        };
+      });
+    }
+    if (spine) {
+      const pts = CAMPAIGN_NODES.map((n) => `${n.x},${n.y}`).join(' ');
+      const doneTo = Math.min(campaign.mission, CAMPAIGN_NODES.length - 1);
+      const donePts = CAMPAIGN_NODES.slice(0, doneTo + 1).map((n) => `${n.x},${n.y}`).join(' ');
+      spine.innerHTML = `
+        <polyline class="spine-all" points="${pts}" fill="none" />
+        <polyline class="spine-done" points="${donePts}" fill="none" />`;
+    }
+
+    const selectedId = this._campSelected || campaign.core[0]?.id;
+    this._campSelected = selectedId;
+    const roster = this.root.querySelector('#camp-roster');
+    if (roster) {
+      roster.innerHTML = campaign.core
+        .map((u) => {
+          const t = UNIT_TYPES[u.typeId];
+          const on = u.id === selectedId ? 'on' : '';
+          const armed = u.upgrades?.arm ? ' · armed' : '';
+          return `<button type="button" class="camp-card ${on}" data-sel="${u.id}">
+            <img class="sart" src="assets/portraits/${t.portrait}" alt="" />
+            <div>
+              <h4>${u.name}</h4>
+              <p>${u.strength}/${t.maxStrength} · ${'★'.repeat(u.experience || 0) || 'unblooded'}${armed}</p>
             </div>
-          </div>
-        </article>`;
-      })
-      .join('');
-    const cat = this.root.querySelector('#shop-cat');
-    cat.innerHTML = shopCatalog()
-      .map(
-        (t) => `<article>
-          <img class="sart" src="assets/portraits/${t.portrait}" alt="" />
-          <div>
-            <h4>${t.name}</h4>
-            <p>${t.slots} slot · melee ${t.meleeAtk}/${t.meleeDef}</p>
-            <button class="gold compact" data-buy="${t.id}" ${campaign.honors < t.cost || slotsUsed(campaign) + t.slots > MAX_SLOTS ? 'disabled' : ''}>Hire ${t.cost}</button>
-          </div>
-        </article>`
-      )
-      .join('');
-    roster.querySelectorAll('[data-refill]').forEach((b) => (b.onclick = () => this.h.onShop('refill', b.dataset.refill)));
-    roster.querySelectorAll('[data-over]').forEach((b) => (b.onclick = () => this.h.onShop('over', b.dataset.over)));
-    roster.querySelectorAll('[data-dismiss]').forEach((b) => (b.onclick = () => this.h.onShop('dismiss', b.dataset.dismiss)));
-    cat.querySelectorAll('[data-buy]').forEach((b) => (b.onclick = () => this.h.onShop('buy', b.dataset.buy)));
+          </button>`;
+        })
+        .join('');
+      roster.querySelectorAll('[data-sel]').forEach((b) => {
+        b.onclick = () => {
+          this._campSelected = b.dataset.sel;
+          this.renderCampaign(campaign);
+        };
+      });
+    }
+
+    const detail = this.root.querySelector('#camp-detail');
+    const u = campaign.core.find((x) => x.id === selectedId) || campaign.core[0];
+    if (detail && u) {
+      const t = UNIT_TYPES[u.typeId];
+      const refill = refillCost(u);
+      const kind = upgradeKindOf(t);
+      const armLabel = kind === 'missile' ? 'Better shot' : kind === 'charge' ? 'Heavier charge' : kind === 'ward' ? 'Better ward' : 'Better armour';
+      const drillMax = (u.experience || 0) >= DRILL_CAP;
+      const armed = !!u.upgrades?.arm;
+      detail.innerHTML = `
+        <img class="camp-detail-art" src="assets/portraits/${t.portrait}" alt="" />
+        <h4>${u.name}</h4>
+        <p>${t.name} · ${armLabel}</p>
+        <div class="sacts">
+          <button class="gold compact" data-refill="${u.id}" ${refill === 0 || campaign.honors < refill ? 'disabled' : ''}>Replacements ${refill || '—'}</button>
+          <button class="gold compact" data-over="${u.id}" ${u.strength >= (t.overstrength || t.maxStrength) || campaign.honors < 15 ? 'disabled' : ''}>Overstrength 15</button>
+          <button class="gold compact" data-drill="${u.id}" ${drillMax || campaign.honors < DRILL_COST ? 'disabled' : ''}>Drill ${DRILL_COST}</button>
+          <button class="gold compact" data-arm="${u.id}" ${armed || campaign.honors < ARM_COST ? 'disabled' : ''}>Arm ${ARM_COST}</button>
+          <button data-dismiss="${u.id}" class="ghost compact">Dismiss</button>
+        </div>`;
+      detail.querySelectorAll('[data-refill]').forEach((b) => (b.onclick = () => this.h.onShop('refill', b.dataset.refill)));
+      detail.querySelectorAll('[data-over]').forEach((b) => (b.onclick = () => this.h.onShop('over', b.dataset.over)));
+      detail.querySelectorAll('[data-drill]').forEach((b) => (b.onclick = () => this.h.onShop('drill', b.dataset.drill)));
+      detail.querySelectorAll('[data-arm]').forEach((b) => (b.onclick = () => this.h.onShop('arm', b.dataset.arm)));
+      detail.querySelectorAll('[data-dismiss]').forEach((b) => (b.onclick = () => this.h.onShop('dismiss', b.dataset.dismiss)));
+    } else if (detail) {
+      detail.innerHTML = '<p class="lede">No cohorts in the core.</p>';
+    }
+
+    const cat = this.root.querySelector('#camp-cat');
+    if (cat) {
+      cat.innerHTML = shopCatalog()
+        .map(
+          (t) => `<article>
+            <img class="sart" src="assets/portraits/${t.portrait}" alt="" />
+            <div>
+              <h4>${t.name}</h4>
+              <p>${t.slots} slot · ${t.cost} honors</p>
+              <button class="gold compact" data-buy="${t.id}" ${campaign.honors < t.cost || slotsUsed(campaign) + t.slots > MAX_SLOTS ? 'disabled' : ''}>Hire</button>
+            </div>
+          </article>`
+        )
+        .join('');
+      cat.querySelectorAll('[data-buy]').forEach((b) => (b.onclick = () => this.h.onShop('buy', b.dataset.buy)));
+    }
+
+    const hist = this.root.querySelector('#camp-hist');
+    if (hist) {
+      const cur = CAMPAIGN_NODES[campaign.mission];
+      const past = historyFor(campaign, cur?.scenarioId);
+      hist.textContent = past
+        ? `${cur.subtitle}: ${past.kind}`
+        : (cur ? cur.blurb : 'The eagles are home.');
+    }
+  }
+
+  renderShop(campaign) {
+    this.renderCampaign(campaign);
   }
 
   renderEnding(text) {

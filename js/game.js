@@ -1,4 +1,4 @@
-import { key, neighbors, hexDistance, offsetToAxial } from './hex.js';
+import { key, neighbors, hexDistance, offsetToAxial, hexToPixel } from './hex.js';
 import { mulberry32, hashSeed } from './rng.js';
 import { TERRAIN, CHAR_TERRAIN, moveCost } from './data/terrain.js';
 import { typeOf, makeUnit, resetUnitIds, isHero, effectiveStrength, UNIT_TYPES } from './data/units.js';
@@ -549,6 +549,7 @@ export class Battle {
         testudo: !!unit.testudo,
       };
     }
+    unit.facing = facingToward(from, { q, r }, unit.facing);
     unit.q = q;
     unit.r = r;
     unit.mpRemaining -= dest.cost;
@@ -601,6 +602,8 @@ export class Battle {
     const missile = opts.missile ?? (inMissileRange(this, attacker, defender) && !canMelee(attacker, defender));
     if (!missile && !canMelee(attacker, defender)) return null;
     if (missile && !inMissileRange(this, attacker, defender)) return null;
+    attacker.facing = facingToward(attacker, defender, attacker.facing);
+    if (defender) defender.facing = facingToward(defender, attacker, defender.facing);
     const result = resolveCombat(this, attacker, defender, { missile });
     this.casualties[defender.faction] += result.aKills;
     this.casualties[attacker.faction] += result.dKills;
@@ -962,6 +965,7 @@ export class Battle {
         maxStrength: u.maxStrength,
         experience: u.experience,
         id: u.id,
+        upgrades: u.upgrades ? { ...u.upgrades } : {},
       }));
   }
 
@@ -1016,6 +1020,8 @@ export class Battle {
         inSupply: !!u.inSupply,
         forcedMarch: !!u.forcedMarch,
         hiredThisBattle: !!u.hiredThisBattle,
+        facing: u.facing ?? 1,
+        upgrades: u.upgrades ? { ...u.upgrades } : {},
       })),
       cells: [...this.cells.values()].map((c) => ({
         q: c.q,
@@ -1085,6 +1091,13 @@ function axial() {
       return { q, r: row };
     },
   };
+}
+
+function facingToward(from, to, fallback = 1) {
+  const p0 = hexToPixel(from.q, from.r, 40);
+  const p1 = hexToPixel(to.q, to.r, 40);
+  if (Math.abs(p1.x - p0.x) < 2) return fallback ?? 1;
+  return p1.x > p0.x ? 1 : -1;
 }
 
 export function loadScenario(id) {

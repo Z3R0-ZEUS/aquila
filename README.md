@@ -4,7 +4,7 @@ A browser hex wargame: Panzer Corps–style operational combat set in Germania, 
 
 ## Modes
 
-- **Campaign** — six linked missions. Core cohorts persist. Spend Honors in winter camp.
+- **Campaign** — six linked missions on a theater map of Germania. Core cohorts persist. Spend Honors in winter camp to refill, drill, and arm them.
 - **Skirmish** — any field, as Rome or as the tribes.
 - **Difficulty** — Recruit, Seasoned, Veteran.
 - Mid-battle **Save** / **Resume** for campaign fights.
@@ -66,9 +66,11 @@ Selected units show the actions they can take.
 - **Repair / Fortify** — immunes rebuild a causeway or raise a marching camp.
 - **Torch** — burn a Chatti village.
 
-Core units persist between the six missions (14 slots). Spend **Honors** in winter quarters — or during deployment — on replacements and new cohorts.
+Core units persist between the six missions (14 slots). Between battles the **campaign map** is the camp: click the current node to march, and spend **Honors** on replacements, drill (+1 experience), arm (once, a lasting stat), and new cohorts.
 
 ## Campaign
+
+Between missions you stand on a map of Germania. The gold node is the next field. Click it — or March — for the briefing. Select a cohort in the camp dock to refill, drill, arm, hire, or dismiss.
 
 1. Castra Vetera, 14 AD — hold the Rhine fortress
 2. Land of the Chatti, 15 AD — burn villages or take the hillfort
